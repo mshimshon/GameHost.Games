@@ -1,0 +1,10 @@
+[
+  {
+    "OperatingSystem": "debian",
+    "OperatingSystemVersion": "13",
+    "Dependencies": [
+      "openjdk-25-jre",
+      "rng-tools5"
+    ]
+  }
+]
