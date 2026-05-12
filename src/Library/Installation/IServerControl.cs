@@ -1,4 +1,4 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses.Status;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses.Status;
 
 namespace GameHost.Games.Lib.Installation;
 

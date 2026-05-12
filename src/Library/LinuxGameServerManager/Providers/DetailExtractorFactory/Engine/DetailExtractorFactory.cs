@@ -1,4 +1,4 @@
-﻿using GameHost.Games.Lib.LinuxGameServerManager.Contracts.Response;
+﻿using GameHost.Games.Lib.LinuxGameServerManager.Payloads.Response;
 using GameHost.Games.Lib.LinuxGameServerManager.Providers.DetailExtratorFactory;
 using LunaticPanel.Core.Utils.Abstraction.LinuxCommand.Helper;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,7 +44,7 @@ internal class DetailExtractorFactory : IDetailExtratorFactory
                 }
             }
             if (nextEntry == default)
-                nextEntry = new(cleanLine, Contracts.Response.Enums.DetailType.Unknown);
+                nextEntry = new(cleanLine, Payloads.Response.Enums.DetailType.Unknown);
             _extracted.Add(nextEntry);
         }
         return _extracted;

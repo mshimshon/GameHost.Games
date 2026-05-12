@@ -1,5 +1,5 @@
 ﻿using GameHost.Core.Features;
-using GameHost.Games.Lib.Installation.Contracts.Responses.Mods;
+using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 using LunaticPanel.Core.Utils.Abstraction.Plugin.Location;
 using System.Text.Json;
 using System.Text.Json.Serialization;

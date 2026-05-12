@@ -1,4 +1,4 @@
-﻿using GameHost.Games.Lib.LinuxGameServerManager.Contracts.Response;
+﻿using GameHost.Games.Lib.LinuxGameServerManager.Payloads.Response;
 
 namespace GameHost.Games.Lib.LinuxGameServerManager;
 

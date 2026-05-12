@@ -1,5 +1,5 @@
 ﻿using GameHost.Games.Lib.Installation;
-using GameHost.Games.Lib.Installation.Contracts.Responses.Mods;
+using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 using GameHost.Games.Lib.Installation.Optionals;
 using GameHost.Games.ProjectZomboid.Console.Extensions;
 using LunaticPanel.Core.Utils.Abstraction.LinuxCommand;

@@ -1,5 +1,5 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses;
-using GameHost.Games.Lib.Installation.Contracts.Responses.GameInfo;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses;
+using GameHost.Games.Lib.Installation.Payloads.Responses.GameInfo;
 
 namespace GameHost.Games.Lib.Installation;
 

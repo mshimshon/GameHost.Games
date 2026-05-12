@@ -1,5 +1,5 @@
 ﻿using GameHost.Games.Lib.Installation;
-using GameHost.Games.Lib.Installation.Contracts.Responses;
+using GameHost.Games.Lib.Installation.Payloads.Responses;
 using GameHost.Games.Lib.LinuxGameServerManager;
 using LunaticPanel.Core.Utils.Abstraction.Plugin.Location;
 

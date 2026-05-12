@@ -14,8 +14,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Contracts\Requests\" />
-    <Folder Include="Contracts\Responses\Common\" />
+    <Folder Include="Payloads\Requests\" />
+    <Folder Include="Payloads\Responses\Common\" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,5 +1,5 @@
-﻿using GameHost.Games.Lib.LinuxGameServerManager.Contracts.Response;
-using GameHost.Games.Lib.LinuxGameServerManager.Contracts.Response.Enums;
+﻿using GameHost.Games.Lib.LinuxGameServerManager.Payloads.Response;
+using GameHost.Games.Lib.LinuxGameServerManager.Payloads.Response.Enums;
 using GameHost.Games.Lib.LinuxGameServerManager.Providers.DetailExtratorFactory;
 
 namespace GameHost.Games.Lib.LinuxGameServerManager.Providers.DetailExtractorFactory.Providers;

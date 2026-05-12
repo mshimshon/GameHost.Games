@@ -1,4 +1,4 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses.Mods;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 
 namespace GameHost.Games.Lib.Installation;
 

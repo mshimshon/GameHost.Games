@@ -1,4 +1,4 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses;
 using GameHost.Games.Lib.Installation.Exceptions;
 using LunaticPanel.Core.Utils.Abstraction.LinuxCommand;
 using LunaticPanel.Core.Utils.Abstraction.Logging;

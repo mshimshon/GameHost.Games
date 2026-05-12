@@ -1,6 +1,6 @@
 ﻿using GameHost.Core.Features;
-using GameHost.Games.Lib.Installation.Contracts.Responses.GameInfo;
-using GameHost.Games.Lib.Installation.Contracts.Responses.StatupParameters;
+using GameHost.Games.Lib.Installation.Payloads.Responses.GameInfo;
+using GameHost.Games.Lib.Installation.Payloads.Responses.StatupParameters;
 using LunaticPanel.Core.Utils.Abstraction.Plugin.Location;
 using System.Text.Json;
 using System.Text.Json.Serialization;

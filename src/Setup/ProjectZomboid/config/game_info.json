@@ -43,6 +43,15 @@
       "defaultValue": "BrokenSkullLunaticWorld",
       "required": true,
       "editable": true,
+      "valiations": [
+        {
+          "type": "LengthConstraint",
+          "data": {
+            "min": 10,
+            "max":  100
+          }
+        }
+      ],
       "validation": {
         "minLength": 1,
         "maxLength": 64,

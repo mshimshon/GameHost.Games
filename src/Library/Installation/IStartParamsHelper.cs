@@ -1,5 +1,5 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses.GameInfo;
-using GameHost.Games.Lib.Installation.Contracts.Responses.StatupParameters;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses.GameInfo;
+using GameHost.Games.Lib.Installation.Payloads.Responses.StatupParameters;
 
 namespace GameHost.Games.Lib.Installation;
 

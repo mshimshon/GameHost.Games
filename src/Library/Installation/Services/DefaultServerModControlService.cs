@@ -1,4 +1,4 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses.Mods;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 using GameHost.Games.Lib.Installation.Exceptions;
 using GameHost.Games.Lib.Installation.Optionals;
 

@@ -1,5 +1,5 @@
 ﻿using GameHost.Games.Lib.Installation;
-using GameHost.Games.Lib.Installation.Contracts.Responses.Status;
+using GameHost.Games.Lib.Installation.Payloads.Responses.Status;
 using GameHost.Games.Lib.Installation.Optionals;
 using GameHost.Games.Lib.LinuxGameServerManager;
 using GameHost.Games.ProjectZomboid.Console.Extensions;

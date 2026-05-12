@@ -1,7 +1,7 @@
-﻿using GameHost.Games.Lib.Installation.Contracts.Responses.Status;
-using GameHost.Games.Lib.Installation.Contracts.Responses.Status.Enums;
-using GameHost.Games.Lib.LinuxGameServerManager.Contracts.Response;
-using GameHost.Games.Lib.LinuxGameServerManager.Contracts.Response.Enums;
+﻿using GameHost.Games.Lib.Installation.Payloads.Responses.Status;
+using GameHost.Games.Lib.Installation.Payloads.Responses.Status.Enums;
+using GameHost.Games.Lib.LinuxGameServerManager.Payloads.Response;
+using GameHost.Games.Lib.LinuxGameServerManager.Payloads.Response.Enums;
 using System.Text.RegularExpressions;
 
 namespace LinuxGameServerManager.Extension;
