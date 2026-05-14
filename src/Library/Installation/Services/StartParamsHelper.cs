@@ -140,7 +140,7 @@ internal class StartParamsHelper : IStartParamsHelper
                 return $"{definition.Key}={value}";
             else
                 return default;
-        else if (def == "list_double" || def == "double")
+        else if (def == "list_decimal" || def == "decimal")
             if (double.TryParse(targetValue, out double value))
                 return $"{definition.Key}={value}";
             else
