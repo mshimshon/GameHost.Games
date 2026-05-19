@@ -2,5 +2,6 @@
 
 public sealed record ModFeatureResponse
 {
-    public bool RequiredManualDownload { get; set; }
+    public bool Modding { get; set; }
+    public bool ManualModDownload { get; set; }
 }

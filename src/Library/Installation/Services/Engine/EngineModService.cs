@@ -1,5 +1,5 @@
-﻿using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
-using GameHost.Games.Lib.Installation.Optionals;
+﻿using GameHost.Games.Lib.Installation.Optionals;
+using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 
 namespace GameHost.Games.Lib.Installation.Services.Engine;
 
@@ -16,7 +16,12 @@ internal class EngineModService : IEngineModService
         _serverModControl = serverModControl;
         _modHelperService = modHelperService;
     }
-    public Task<ModFeatureResponse> GetDetailsAsync(CancellationToken ct = default) => _serverModControl.GetDetailsAsync(ct);
+    public async Task<ModFeatureResponse> GetDetailsAsync(CancellationToken ct = default)
+    {
+        var result = await _serverModControl.GetDetailsAsync(ct);
+        var enabled = await _serverModControl.IsSupportedAsync(ct);
+        return result with { Modding = enabled };
+    }
     public Task<bool> IsSupportedAsync(CancellationToken ct = default) => _serverModControl.IsSupportedAsync(ct);
     public Task ProcessModListAsync(CancellationToken ct = default) => _serverModControl.ProcessModListAsync(ct);
     public Task RemoveCurrentAsync(CancellationToken ct = default)

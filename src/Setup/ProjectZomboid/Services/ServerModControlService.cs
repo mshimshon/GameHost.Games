@@ -1,6 +1,6 @@
 ﻿using GameHost.Games.Lib.Installation;
-using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 using GameHost.Games.Lib.Installation.Optionals;
+using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 using GameHost.Games.ProjectZomboid.Console.Extensions;
 using LunaticPanel.Core.Utils.Abstraction.LinuxCommand;
 using LunaticPanel.Core.Utils.Abstraction.Logging;
@@ -33,7 +33,7 @@ internal class ServerModControlService : IServerModControl
     public Task<ModFeatureResponse> GetDetailsAsync(CancellationToken ct = default)
         => Task.FromResult(new ModFeatureResponse()
         {
-            RequiredManualDownload = false
+            ManualModDownload = false
         });
 
     public Task<bool> IsSupportedAsync(CancellationToken ct = default) => Task.FromResult(true);
