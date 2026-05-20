@@ -10,18 +10,15 @@
         "defaultValue": "Muldraugh, KY",
         "required": true,
         "editable": true,
-        "validation": {
-          "minLength": 1,
-          "maxLength": 64,
-          "prohibitEmpty": true,
-          "prohibitSpaces": true,
-          "prohibitNonAlphaNumeric": true,
-          "prohibitNonAlpha": true,
-          "prohibitNonNumeric": true,
-          "allowAlphaOnly": true,
-          "allowNumericOnly": true,
-          "match_regex": [ "", "" ]
-        }
+        "Validations": [
+          {
+            "type": "LengthConstraint",
+            "data": {
+              "min": 10,
+              "max": 100
+            }
+          }
+        ]
       }
     ]
   }
