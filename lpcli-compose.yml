@@ -4,3 +4,4 @@ post_processing:
     archive: "tar.gz" # Make tar.gz or .zip
     build_to: "/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/ProjectZomboid.tar.gz"
   - command: "ls /home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/"
+
