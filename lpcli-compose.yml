@@ -2,6 +2,7 @@ post_processing:
   - command: "if ! id -u lgsm >/dev/null 2>&1; then useradd -m -d /home/lgsm -s /usr/sbin/nologin lgsm; fi" # PreCreate LGSM Username 
   - dotnet_project: "./src/Setup/ProjectZomboid/ProjectZomboid.csproj"
     archive: "tar.gz" # Make tar.gz or .zip
-    build_to: "/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/ProjectZomboid.tar.gz"
-  - command: "ls /home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/"
+    publish_to: "/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/installers/ProjectZomboid.tar.gz"
+  - command: "ls /home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/installers"
 
+  #/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/installers/
