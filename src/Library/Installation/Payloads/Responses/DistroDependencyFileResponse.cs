@@ -2,6 +2,6 @@
 
 public sealed record DistroDependencyFileResponse
 {
-    public List<string> Common { get; set; } = default!;
-    public Dictionary<string, string[]>? Specific { get; set; }
+    public List<string> Common { get; init; } = default!;
+    public Dictionary<string, string[]>? Specific { get; init; }
 }

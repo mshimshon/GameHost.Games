@@ -1,8 +1,12 @@
-﻿using GameHost.Games.Lib.Installation.Payloads.Responses;
-using GameHost.Games.Lib.Installation.Exceptions;
+﻿using GameHost.Games.Lib.Installation.Exceptions;
+using GameHost.Games.Lib.Installation.Payloads.Responses;
 using LunaticPanel.Core.Utils.Abstraction.LinuxCommand;
 using LunaticPanel.Core.Utils.Abstraction.Logging;
 using LunaticPanel.Core.Utils.Abstraction.Plugin.Location;
+using LunaticPanel.Core.Utils.Abstraction.SafeFileWriter;
+using System.Formats.Tar;
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -13,6 +17,7 @@ internal class DistroDependencyFileService : IDistroDependencyFileService
     private readonly ILinuxCommand _linuxCommand;
     private readonly IPluginUserLocation _pluginUserLocation;
     private readonly ICrazyReport<DistroDependencyFileService> _crazyReport;
+    private readonly ISafeFileWriter _safeFileWriter;
     private readonly JsonSerializerOptions _jsonSerializerOptions = new()
     {
         AllowTrailingCommas = true,
@@ -27,11 +32,12 @@ internal class DistroDependencyFileService : IDistroDependencyFileService
     private readonly bool _debug = false;
 #endif
 
-    public DistroDependencyFileService(ILinuxCommand linuxCommand, IPluginLocation pluginLocation, ICrazyReport<DistroDependencyFileService> crazyReport)
+    public DistroDependencyFileService(ILinuxCommand linuxCommand, IPluginLocation pluginLocation, ICrazyReport<DistroDependencyFileService> crazyReport, ISafeFileWriter safeFileWriter)
     {
         _linuxCommand = linuxCommand;
         _pluginUserLocation = pluginLocation;
         _crazyReport = crazyReport;
+        _safeFileWriter = safeFileWriter;
         _pluginUserLocation.SetUsername(BaseInfo.USERNAME);
     }
 
@@ -77,7 +83,30 @@ internal class DistroDependencyFileService : IDistroDependencyFileService
 
         return dto;
     }
+    private async Task<string> ReadFromTarGzAsync(
+        string tarGzPath, string file,
+        CancellationToken ct = default)
+    {
+        await using FileStream fs = new(tarGzPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using GZipStream gz = new(fs, CompressionMode.Decompress, leaveOpen: false);
+        using TarReader tar = new(gz);
 
+        TarEntry? entry;
+        while ((entry = await tar.GetNextEntryAsync(false, ct)) != null)
+        {
+            if (!string.Equals(entry.Name, file, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (entry.DataStream == null)
+                throw new DistroDependencyDownloadFailedException("", "", $"{file} not found in tar.gz");
+
+            using MemoryStream ms = new();
+            await entry.DataStream.CopyToAsync(ms, ct);
+            return Encoding.UTF8.GetString(ms.ToArray());
+        }
+
+        throw new DistroDependencyDownloadFailedException("", "", $"{file} not found in tar.gz");
+    }
     public async Task DownloadOfficialDistroDependencyFile(CancellationToken ct = default)
     {
         _crazyReport.ReportInfo("Downloading Distro Dependency File...");
@@ -86,16 +115,46 @@ internal class DistroDependencyFileService : IDistroDependencyFileService
         string targetLocation = _pluginUserLocation.GetUserDownloadFor(BaseInfo.PLUGIN_MODULE_NAME, BaseInfo.DISTRO_DEP_FILENAME);
         if (_debug)
         {
+            var depCommonFilename = string.Format("dep_{0}_{1}_common.json", distroInfo.Id, distroInfo.VersionId);
+            //dep_debian_13_common
             _crazyReport.ReportWarning("Debug Build, Using Mockup Location.");
+            string depCommonFile = _pluginUserLocation.GetUserDownloadFor(BaseInfo.PLUGIN_MODULE_NAME, [BaseInfo.MOCK_FOLDER], depCommonFilename);
+            if (!File.Exists(depCommonFile))
+                throw new DistroDependencyDownloadFailedException("", "", "Failed to get dev common dependency file (File not found).");
+            List<string>? common = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(depCommonFile), _jsonSerializerOptions);
+            if (common == default)
+                throw new DistroDependencyDownloadFailedException("", "", "Cannot read common dep dev file.");
+            string installerLocation = _pluginUserLocation.GetUserDownloadBase(BaseInfo.PLUGIN_MODULE_NAME, [BaseInfo.MOCK_FOLDER, "installers"]);
+            DistroDependencyFileResponse dependencyFile = new()
+            {
+                Common = common,
+                Specific = new()
 
-            string sourceLocation = _pluginUserLocation.GetUserDownloadFor(BaseInfo.PLUGIN_MODULE_NAME, [BaseInfo.MOCK_FOLDER], $"{depFilename}.dev.json");
-            _crazyReport.ReportInfo("Copying File from {0} to {1}", sourceLocation, targetLocation);
-            var depFileCommand = $"cp -f \"{sourceLocation}\" \"{targetLocation}\"";
-            var depFileResult = await _linuxCommand.BuildCommand(depFileCommand).ExecAsync(ct);
-            if (depFileResult.Failed || !File.Exists(targetLocation))
-                throw new DistroDependencyDownloadFailedException(depFileResult.StandardOutput, depFileResult.StandardError, "Failed to fetch distro dependency file or the OS is not supported.");
+            };
+            foreach (var item in Directory.GetFiles(installerLocation, "*.tar.gz", SearchOption.TopDirectoryOnly))
+            {
+                var resultManifest = await ReadFromTarGzAsync(item, "config/manifest.json", ct);
+                var manifestLoaded = JsonSerializer.Deserialize<ManifestResponse>(resultManifest, _jsonSerializerOptions);
+                if (manifestLoaded == default)
+                    throw new DistroDependencyDownloadFailedException("", "", "Failed to extract manifest from archive.");
+                var resultDependency = await ReadFromTarGzAsync(item, "config/dependencies.json", ct);
+                var dependencyListLoaded = JsonSerializer.Deserialize<List<InstallerDependencyFileResponse>>(resultDependency, _jsonSerializerOptions);
+                var dependencyLoaded = dependencyListLoaded?
+                     .Where(p => string.Equals(p.OperatingSystem, distroInfo.Id, StringComparison.OrdinalIgnoreCase))
+                     .Where(p => string.Equals(p.OperatingSystemVersion, distroInfo.VersionId, StringComparison.OrdinalIgnoreCase))
+                     .FirstOrDefault();
+                if (dependencyLoaded == default)
+                    throw new DistroDependencyDownloadFailedException("", "", "Failed to extract manifest from archive.");
+
+                dependencyFile.Specific[manifestLoaded.Id] = dependencyLoaded.Dependencies.ToArray();
+            }
+
+            string mockDepFile = JsonSerializer.Serialize(dependencyFile, _jsonSerializerOptions);
+            _crazyReport.ReportInfo("Creating Mock Dep File {1}", targetLocation);
+            await _safeFileWriter.WriteThenCopyFileAsync(targetLocation, mockDepFile, ct);
+            if (!File.Exists(targetLocation))
+                throw new DistroDependencyDownloadFailedException("", "", "Failed to fetch distro dependency file or the OS is not supported.");
             _crazyReport.ReportSuccess("Copied! ({0})", targetLocation);
-
         }
 
     }
@@ -108,15 +167,16 @@ internal class DistroDependencyFileService : IDistroDependencyFileService
         string json = File.ReadAllText(targetLocation);
         try
         {
+            _crazyReport.Report(json);
             var dependencyInfo = JsonSerializer.Deserialize<DistroDependencyFileResponse>(json, _jsonSerializerOptions);
             if (dependencyInfo == default)
                 throw new NullReferenceException("Dependency Info Cannot be null.");
             _crazyReport.ReportSuccess("Distro Dependency File Successfully Parsed!");
-
             return dependencyInfo;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _crazyReport.ReportErrorException(ex.Message, ex);
             throw new DistroDependencyFileInvalidException(json);
         }
 

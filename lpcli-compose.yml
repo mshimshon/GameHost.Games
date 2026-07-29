@@ -4,5 +4,7 @@ post_processing:
     archive: "tar.gz" # Make tar.gz or .zip
     publish_to: "/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/installers/ProjectZomboid.tar.gz"
   - command: "ls /home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/installers"
+  - file: "./dep_debian_13_common.json"
+    file_to: "/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/dep_debian_13_common.json"
 
   #/home/lgsm/lunaticpanel/plugins/gamehost/download/linuxgameserver/mockup/installers/
