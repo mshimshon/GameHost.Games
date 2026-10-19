@@ -62,9 +62,11 @@ jobs:
                 exit 1
             fi
             echo "$csproj -> $version"
-            projectVersions+="${csproj};${version};${name}\n"
+            projectVersions+="${csproj};${version};${name}
+            "
             if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
-              projectVersionToRelease+="${csproj};${version};${name}\n"
+              projectVersionToRelease+="${csproj};${version};${name}
+              "
             fi
           done
           echo "projectVersionToRelease=${projectVersionToRelease}" >> $GITHUB_OUTPUT
