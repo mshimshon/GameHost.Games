@@ -15,12 +15,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="LunaticPanel.Core.Utils"  />
+		<PackageReference Include="GameHost.Keys" />
+		<PackageReference Include="LunaticPanel.Core.Utils"  />
 	  <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\..\..\MaksimShimshon.GameManagePanel\src\GameHost.Core\GameHost.Core.csproj" />
 	  <ProjectReference Include="..\..\Library\Installation\Installation.csproj" />
 	  <ProjectReference Include="..\..\Library\LinuxGameServerManager.Extension\LinuxGameServerManager.Extension.csproj" />
 	  <ProjectReference Include="..\..\Library\LinuxGameServerManager\LinuxGameServerManager.csproj" />

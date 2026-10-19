@@ -1,4 +1,4 @@
-﻿using GameHost.Core.Features;
+﻿using GameHost.Keys.Features;
 using GameHost.Games.Lib.Installation.Payloads.Responses;
 using GameHost.Games.Lib.Installation.Exceptions;
 using GameHost.Games.Lib.Installation.Extensions;

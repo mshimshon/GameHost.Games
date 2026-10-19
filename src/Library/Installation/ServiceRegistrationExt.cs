@@ -1,5 +1,4 @@
-﻿using GameHost.Core;
-using GameHost.Games.Lib.Installation.Optionals;
+﻿using GameHost.Games.Lib.Installation.Optionals;
 using GameHost.Games.Lib.Installation.Services;
 using GameHost.Games.Lib.Installation.Services.Engine;
 using LunaticPanel.Core.Utils;
