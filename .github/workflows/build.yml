@@ -1,0 +1,70 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build:
+    if: github.event.base_ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    env:
+      DOTNET_TEST_RUNNER: Microsoft.Testing.Platform
+
+    steps:
+      - name: Extract version
+        id: get_version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish Projects
+        id: project_discovery
+        run: |
+          allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
+          for csproj in $allProjects; do
+            dotnet publish "$csproj" -c Release -r linux-x64 --self-contained true 
+          done
+          echo "allProjects=${allProjects[*]}" >> $GITHUB_OUTPUT
+
+      - name: Validating Consoles
+        run: |
+          set -eu
+          allProjects="${{ steps.project_discovery.outputs.allProjects }}"
+          if [ -z "$allProjects" ]; then
+            echo "::error::NO PROJECTS FOUND"
+            exit 1
+          fi
+          for csproj in $allProjects; do
+            root="$(dirname "$csproj")"
+
+            [ -f "$root/assets/server_banner.jpg" ] || {
+              echo "::error::/assets/server_banner.jpg must be present for $csproj"
+              exit 1
+            }
+
+            [ -f "$root/config/game_info.json" ] || {
+              echo "::error::/config/game_info.json must be present for $csproj"
+              exit 1
+            }
+
+            [ -f "$root/config/manifest.json" ] || {
+              echo "::error::/config/manifest.json must be present for $csproj"
+              exit 1
+            }
+
+            [ -f "$root/config/dependencies.json" ] || {
+              echo "::error::/config/dependencies.json must be present for $csproj"
+              exit 1
+            }
+          done

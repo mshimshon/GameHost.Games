@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/Games/" />
+  <Folder Name="/Games/Library/">
+    <Project Path="Library/Installation/Installation.csproj" />
+    <Project Path="Library/LinuxGameServerManager.Extension/LinuxGameServerManager.Extension.csproj" />
+    <Project Path="Library/LinuxGameServerManager/LinuxGameServerManager.csproj" />
+    <Project Path="Library/Steam/Steam.csproj" />
+  </Folder>
+  <Folder Name="/Games/Setup/" />
+  <Folder Name="/Games/Setup/Project Zomboid/">
+    <Project Path="Setup/ProjectZomboid/ProjectZomboid.csproj" />
+  </Folder>
+
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Packages.props" />
+    <File Path="../.github/workflows/build.yml" />
+    <File Path="../.github/workflows/deploy.yml" />
+        <File Path="../dep_debian_13_common.json" />
+    <File Path="../lpcli-compose.yml" />
+  </Folder>
+</Solution>

@@ -1,0 +1,216 @@
+name: Release
+on:
+  workflow_run:
+    workflows: ["Build"]
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      id-token: write  # Crucial for OIDC token request privileges
+      contents: write  
+    if: |
+       github.event.workflow_run.conclusion == 'success' && 
+       startsWith(github.event.workflow_run.head_branch, 'v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: get_version
+        run: |
+          mkdir -p "/tmp/artifacts/output"
+          # Grabs the short tag name (e.g., v0.0.2)
+          TAG="${{ github.event.workflow_run.head_branch }}"
+          
+          # Strips the leading 'v' to get just the numbers (e.g., 0.0.2)
+          VERSION="${TAG#v}"
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Discover Projects
+        id: project_discovery
+        run: |
+          allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
+          projectVersions=()
+          projectVersionToRelease=()
+          for csproj in $allProjects; do
+            name="$(basename "$csproj" .csproj)"
+            version="$(grep -oPm1 '(?<=<Version>)[^<]+' "$csproj" || true)"
+            if [ -z "$version" ]; then
+              echo "::error file=$csproj::Missing <Version>"
+              exit 1
+            fi
+            echo "$csproj -> $version"
+            projectVersions + =("${csproj};${version};${name}")
+            if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
+              projectVersionToRelease+=("${csproj};${version};${name}")
+            fi
+          done
+          echo "projectVersionToRelease=${projectVersionToRelease[*]}" >> $GITHUB_OUTPUT
+          echo "projectVersions=${projectVersions[*]}" >> $GITHUB_OUTPUT
+          echo "allProjects=${allProjects[*]}" >> $GITHUB_OUTPUT
+
+      - name: Validating Consoles
+        run: |
+          set -eu
+          allProjects="${{ steps.project_discovery.outputs.allProjects }}"
+          if [ -z "$allProjects" ]; then
+            echo "::error::NO PROJECTS FOUND"
+            exit 1
+          fi
+          for csproj in $allProjects; do
+            root="$(dirname "$csproj")"
+
+            [ -f "$root/assets/server_banner.jpg" ] || {
+              echo "::error::/assets/server_banner.jpg must be present for $csproj"
+              exit 1
+            }
+
+            [ -f "$root/config/game_info.json" ] || {
+              echo "::error::/config/game_info.json must be present for $csproj"
+              exit 1
+            }
+
+            [ -f "$root/config/manifest.json" ] || {
+              echo "::error::/config/manifest.json must be present for $csproj"
+              exit 1
+            }
+
+            [ -f "$root/config/dependencies.json" ] || {
+              echo "::error::/config/dependencies.json must be present for $csproj"
+              exit 1
+            }
+          done
+
+      - name: Publish New Releases
+        run: |
+          set -eu
+          releases="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
+
+          if [ -z "$releases" ]; then
+            echo "NO RELEASE FOUND"
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/output/consoles"
+
+          for item in $releases; do
+            IFS=';' read -r csproj version name <<< "$item"
+
+            echo "Publishing $name version $version..."
+
+            publish_dir="$GITHUB_WORKSPACE/publish_temp/$name"
+            dotnet publish "$csproj" -c Release -r linux-x64 --self-contained true -o "$publish_dir"
+
+            archive_name="${name}.${version}.tar.gz"
+            tar -czf "$GITHUB_WORKSPACE/output/consoles/$archive_name" -C "$publish_dir" .
+          done
+
+      - name: Compiling Manifests
+        run: |
+            set -eu
+
+            allProjects="${{ steps.project_discovery.outputs.allProjects }}"
+
+            if [ -z "$allProjects" ]; then
+              echo "::error::NO PROJECTS FOUND"
+              exit 1
+            fi
+
+            mkdir -p "$GITHUB_WORKSPACE/output/registry"
+
+            manifestsArray="[]"
+
+            for csproj in $allProjects; do
+              root="$(dirname "$csproj")"
+              manifest_path="$root/config/manifest.json"
+
+              if [ ! -f "$manifest_path" ]; then
+                echo "::error::manifest.json missing for $csproj"
+                exit 1
+              fi
+
+              # Use jq to append each manifest object into a JSON array
+              manifestsArray="$(jq --argjson new_item "$(cat "$manifest_path")" '. + [$new_item]' <<< "$manifestsArray")"
+            done
+
+            echo "$manifestsArray" > "$GITHUB_WORKSPACE/output/registry/manifests.json"
+
+      - name: Building Dependencies Registry
+        run: |
+          set -eu
+          commonFiles="$(find "$GITHUB_WORKSPACE" -name 'dep_*_*_common.json' | sort)"
+          if [ -z "$commonFiles" ]; then
+            echo "::error::NO COMMON DEPENDENCY FILES FOUND"
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/output/registry"
+          for file in $commonFiles; do
+            cp "$file" "$GITHUB_WORKSPACE/output/registry/"
+          done
+
+      - name: Validating Release
+        run: |
+            registry_dir="$GITHUB_WORKSPACE/output/registry"
+
+            if [ ! -d "$registry_dir" ]; then
+              echo "::error::Registry directory does not exist: $registry_dir"
+              exit 1
+            fi
+            output_dir="$GITHUB_WORKSPACE/output/consoles"
+            if [ ! -d "$output_dir" ]; then
+              echo "::error::Console output directory does not exist: $output_dir"
+              exit 1
+            fi
+
+            tarball_files="$(find "$output_dir" -name '*.tar.gz' | sort)"
+            if [ -z "$tarball_files" ]; then
+              echo "::error::No tar.gz files found in $output_dir"
+              exit 1
+            fi
+      - name: Create registry release
+        run: |
+            set -eu
+            output_dir="$GITHUB_WORKSPACE/output/consoles"
+            tarball_files="$(find "$output_dir" -name '*.tar.gz' | sort)"
+            for tarball in $tarball_files; do
+              filename="$(basename "$tarball")"
+      
+              # Extract name and version from format: {NAME}.{VERSION}.tar.gz
+              # Assuming filename looks like: myproject.1.0.0.tar.gz
+              # We strip the .tar.gz extension first
+              base_no_ext="${filename%.tar.gz}"
+      
+              # Split by dots from the right or parse carefully
+              # Assuming version is the last part and name is the rest
+              version="${base_no_ext##*.}"
+              name="${base_no_ext%.*}"
+              tag_name="${name}-v${version}"
+              echo "Creating release $tag_name with file $filename..."
+              gh release create "$tag_name" "$tarball" --title "$tag_name" --notes "Release for $name version $version"
+            done
+
+      - name: Release Registry
+        run: |
+            set -eu
+            registry_dir="$GITHUB_WORKSPACE/output/registry"
+            version="${{ steps.get_version.outputs.version }}"
+            tag_name="registry-v${version}"
+            echo "Creating release $tag_name and uploading registry contents..."
+            # Uploads all files inside the registry folder as release assets
+            gh release create "$tag_name" "$registry_dir"/* --title "$tag_name" --notes "Registry release version $version"
