@@ -46,11 +46,10 @@ jobs:
 
       - name: Discover Projects
         id: project_discovery
-        shell: bash
         run: |
           allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
-          projectVersions=()
-          projectVersionToRelease=()
+          projectVersions=""
+          projectVersionToRelease=""
           for csproj in $allProjects; do
             name="$(basename "$csproj" .csproj)"
             version="$(grep -oPm1 '(?<=<Version>)[^<]+' "$csproj" || true)"
@@ -59,14 +58,14 @@ jobs:
               exit 1
             fi
             echo "$csproj -> $version"
-            projectVersions + =("${csproj};${version};${name}")
+            projectVersions+="${csproj};${version};${name}\n"
             if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
-              projectVersionToRelease+=("${csproj};${version};${name}")
+              projectVersionToRelease+="${csproj};${version};${name}\n"
             fi
           done
-          echo "projectVersionToRelease=${projectVersionToRelease[*]}" >> $GITHUB_OUTPUT
-          echo "projectVersions=${projectVersions[*]}" >> $GITHUB_OUTPUT
-          echo "allProjects=${allProjects[*]}" >> $GITHUB_OUTPUT
+          echo "projectVersionToRelease=${projectVersionToRelease}" >> $GITHUB_OUTPUT
+          echo "projectVersions=${projectVersions}" >> $GITHUB_OUTPUT
+          echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
 
       - name: Validating Consoles
         shell: bash
