@@ -16,8 +16,9 @@ jobs:
     timeout-minutes: 360
     environment:
       name: production
-   env:
+    env:
       GH_TOKEN: ${{ github.token }}
+
     permissions:
       id-token: write  # Crucial for OIDC token request privileges
       contents: write  
