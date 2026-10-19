@@ -7,7 +7,6 @@
 		<GlobalCopyright>Asylum Foundation™ © 2026</GlobalCopyright>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageVersion Include="LunaticPanel.Core.Utils" Version="0.2.101" />
 		<PackageVersion Include="LunaticPanel.Core.Abstraction" Version="0.2.101" />
 		<PackageVersion Include="LunaticPanel.Core.Extensions" Version="0.2.101" />
 		<PackageVersion Include="LunaticPanel.Core.Utils" Version="0.2.101" />
