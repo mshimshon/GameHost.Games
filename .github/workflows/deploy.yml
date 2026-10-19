@@ -215,8 +215,11 @@ jobs:
       
               # Split by dots from the right or parse carefully
               # Assuming version is the last part and name is the rest
-              version="${base_no_ext##*.}"
-              name="${base_no_ext%.*}"
+              base_no_ext="${filename%.tar.gz}"
+
+              version="$(echo "$base_no_ext" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$')"
+              name="${base_no_ext%.$version}"
+
               tag_name="${name}-v${version}"
               echo "Creating release $tag_name with file $filename..."
               gh release create "$tag_name" "$tarball" --title "$tag_name" --notes "Release for $name version $version"
