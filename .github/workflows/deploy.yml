@@ -72,7 +72,6 @@ jobs:
           echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
 
       - name: Validating Consoles
-        shell: bash
         run: |
           set -eu
           allProjects="${{ steps.project_discovery.outputs.allProjects }}"
@@ -105,11 +104,10 @@ jobs:
           done
 
       - name: Publish New Releases
-        shell: bash
         run: |
           set -eu
           releases="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
-
+          echo "RELEASES=[$releases]"
           if [ -z "$releases" ]; then
             echo "NO RELEASE FOUND"
             exit 1
@@ -135,7 +133,6 @@ jobs:
           IFS=$OLDIFS
 
       - name: Compiling Manifests
-        shell: bash
         run: |
             set -eu
 
