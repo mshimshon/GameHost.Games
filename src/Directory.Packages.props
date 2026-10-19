@@ -1,7 +1,7 @@
 <Project>
 	<PropertyGroup>
 		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-		<GlobalVersion>0.2.1</GlobalVersion>
+		<GlobalVersion>0.0.100</GlobalVersion>
 		<GlobalCompany>Asylum Foundation™</GlobalCompany>
 		<GlobalAuthors>Asylum Foundation™</GlobalAuthors>
 		<GlobalCopyright>Asylum Foundation™ © 2026</GlobalCopyright>
