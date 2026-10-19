@@ -15,8 +15,8 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="LunaticPanel.Core.Utils" Version="*" />
-	  <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+	  <PackageReference Include="LunaticPanel.Core.Utils"  />
+	  <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
 	</ItemGroup>
 
 	<ItemGroup>
