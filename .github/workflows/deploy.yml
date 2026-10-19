@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 360
     environment:
       name: production
+   env:
+      GH_TOKEN: ${{ github.token }}
     permissions:
       id-token: write  # Crucial for OIDC token request privileges
       contents: write  
@@ -197,8 +199,7 @@ jobs:
               echo "::error::No tar.gz files found in $output_dir"
               exit 1
             fi
-      - name: Create registry release
-        shell: bash
+      - name: Release Consoles
         run: |
             set -eu
             output_dir="$GITHUB_WORKSPACE/output/consoles"
@@ -221,7 +222,6 @@ jobs:
             done
 
       - name: Release Registry
-        shell: bash
         run: |
             set -eu
             registry_dir="$GITHUB_WORKSPACE/output/registry"
