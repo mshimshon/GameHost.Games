@@ -14,15 +14,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LunaticPanel.Core.Utils" Version="0.1.836" />
-    <PackageReference Include="LunaticPanel.Core.Utils.Abstraction" Version="0.1.836" />
+    <PackageReference Include="LunaticPanel.Core.Utils" Version="*" />
+    <PackageReference Include="LunaticPanel.Core.Utils.Abstraction" Version="*" />
+    <PackageReference Include="MailKit" Version="4.18.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
     <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.8" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.8" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Engine\" />
+    <Folder Include="Exceptions\" />
   </ItemGroup>
 
 </Project>

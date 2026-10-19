@@ -141,8 +141,7 @@ internal class DistroDependencyFileService : IDistroDependencyFileService
                 var dependencyListLoaded = JsonSerializer.Deserialize<List<InstallerDependencyFileResponse>>(resultDependency, _jsonSerializerOptions);
                 var dependencyLoaded = dependencyListLoaded?
                      .Where(p => string.Equals(p.OperatingSystem, distroInfo.Id, StringComparison.OrdinalIgnoreCase))
-                     .Where(p => string.Equals(p.OperatingSystemVersion, distroInfo.VersionId, StringComparison.OrdinalIgnoreCase))
-                     .FirstOrDefault();
+                     .FirstOrDefault(p => string.Equals(p.OperatingSystemVersion, distroInfo.VersionId, StringComparison.OrdinalIgnoreCase));
                 if (dependencyLoaded == default)
                     throw new DistroDependencyDownloadFailedException("", "", "Failed to extract manifest from archive.");
 
