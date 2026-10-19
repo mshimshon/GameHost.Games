@@ -62,11 +62,9 @@ jobs:
                 exit 1
             fi
             echo "$csproj -> $version"
-            projectVersions+="${csproj};${version};${name}
-            "
+            projectVersions+="${csproj};${version};${name},"
             if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
-              projectVersionToRelease+="${csproj};${version};${name}
-              "
+              projectVersionToRelease+="${csproj};${version};${name},"
             fi
           done
           echo "projectVersionToRelease=${projectVersionToRelease}" >> $GITHUB_OUTPUT
@@ -118,9 +116,13 @@ jobs:
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/output/consoles"
-
+          OLDIFS=$IFS
+          IFS=','
           for item in $releases; do
-            IFS=';' read -r csproj version name <<< "$item"
+            set -- $(echo "$item" | tr ';' ' ')
+            csproj="$1"
+            version="$2"
+            name="$3"
 
             echo "Publishing $name version $version..."
 
@@ -130,6 +132,7 @@ jobs:
             archive_name="${name}.${version}.tar.gz"
             tar -czf "$GITHUB_WORKSPACE/output/consoles/$archive_name" -C "$publish_dir" .
           done
+          IFS=$OLDIFS
 
       - name: Compiling Manifests
         shell: bash
