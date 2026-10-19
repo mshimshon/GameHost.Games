@@ -1,6 +1,7 @@
 ﻿using GameHost.Games.Lib.Installation.Optionals;
 using GameHost.Games.Lib.Installation.Services;
 using GameHost.Games.Lib.Installation.Services.Engine;
+using GameHost.Keys;
 using LunaticPanel.Core.Utils;
 using LunaticPanel.Core.Utils.Logging;
 using Microsoft.Extensions.DependencyInjection;
