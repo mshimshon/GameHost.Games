@@ -57,6 +57,10 @@ jobs:
               echo "::error file=$csproj::Missing <Version>"
               exit 1
             fi
+            if ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                echo "::error file=$csproj::Invalid version '$version'. Expected x.x.x"
+                exit 1
+            fi
             echo "$csproj -> $version"
             projectVersions+="${csproj};${version};${name}\n"
             if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
