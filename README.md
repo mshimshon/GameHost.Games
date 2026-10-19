@@ -1,17 +1,18 @@
 ## What is this?
 
-This is the official repository for LGSM's MaksimShimshon.GameManagerPanel support for games. each supported server contains information and scripts to bind LGSM and the panel.
-Such as: startup parameters, modding capabilities and other game specific scripts like (Arma 3 auto lowercases all PBOs to avoid mod issues.).
+This is CLI projects for every supported game servers for the [Lunatic Panel](https://github.com/mshimshon/LunaticPanel/) Plugin [GameHost](https://github.com/mshimshon/GameHost/) but it also work independently just like [LinuxGMS](https://linuxgsm.com/) does.
 
-## Are you Hosting Service?
-Each supported game should offer the ability to "patch" settings meaning for example "Project Zomboid" has a config_patch.cfg this ensures a forces ini settings change by the client will automatically revert to your allowed value base on the patch file every restart/startup of the game server.
+These projects are standarizing API for installing and controlling lifecycle of game servers MODS and config file included so the plugin can use a standard method of communication with those CLI.
 
-game_info_overrides allows you to for example disable mods for a game... or allow specifc steam branchs or even disable or set default value for startup parameters ie: ports... when the config files are update from our official repo you changes remain for better or worst... your file setting is the ultimate authority and will prevele over ours.
+They can entirely run as standalone via regular console command or bash scripts by design for Automation itself.
+The console also create any game server under username lgsm and policy is one container = one server it cannot handle multiple instances.
 
-You can also do in AppSetting.json change the repository location from this here to your own and publish your own updates and developped scripts.
+Most of the consoles are wrapping [LinuxGMS](https://linuxgsm.com/) in the background whenever available, no need to reinvent the wheel there.
 
-## Overrides Location
-the files can change based on game as it is game specific but the location remain `/home/lgsm/lunaticpanel/plugins/maksimshimshon_gamemanagepanel/overrides/`.
+## Documentation
+Full documentation will be provided soon
 
-for the game_info.json it is universal to all games: `/home/lgsm/lunaticpanel/plugins/maksimshimshon_gamemanagepanel/overrides/game_info_overides.json`.
-just copy the game_info.json but ensure you leave only the persistent properties you wish to change... to avoid complete override.
+## LICENSE
+Every CLI is MIT licensed and will remain MIT forever do whatever you need with it.
+
+please note the [GameHost](https://github.com/mshimshon/GameHost/) plugin is NOT MIT therefore if used through the plugin it is bound by its license.
