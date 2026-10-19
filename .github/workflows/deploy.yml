@@ -62,9 +62,9 @@ jobs:
                 exit 1
             fi
             echo "$csproj -> $version"
-            projectVersions+="${csproj};${version};${name},"
+            projectVersions+="${csproj};${version};${name} "
             if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
-              projectVersionToRelease+="${csproj};${version};${name},"
+              projectVersionToRelease+="${csproj};${version};${name} "
             fi
           done
           echo "projectVersionToRelease=${projectVersionToRelease}" >> $GITHUB_OUTPUT
@@ -72,6 +72,7 @@ jobs:
           echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
 
       - name: Validating Consoles
+        shell: bash
         run: |
           set -eu
           allProjects="${{ steps.project_discovery.outputs.allProjects }}"
@@ -104,20 +105,20 @@ jobs:
           done
 
       - name: Publish New Releases
+        shell: bash
         run: |
           set -eu
           releases="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
-          echo "RELEASES=[$releases]"
+
           if [ -z "$releases" ]; then
             echo "NO RELEASE FOUND"
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/output/consoles"
-          OLDIFS=$IFS
-          IFS=','
           for item in $releases; do
             set -- $(echo "$item" | tr ';' ' ')
+
             csproj="$1"
             version="$2"
             name="$3"
@@ -130,9 +131,9 @@ jobs:
             archive_name="${name}.${version}.tar.gz"
             tar -czf "$GITHUB_WORKSPACE/output/consoles/$archive_name" -C "$publish_dir" .
           done
-          IFS=$OLDIFS
 
       - name: Compiling Manifests
+        shell: bash
         run: |
             set -eu
 
