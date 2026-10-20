@@ -207,14 +207,7 @@ jobs:
             tarball_files="$(find "$output_dir" -name '*.tar.gz' | sort)"
             for tarball in $tarball_files; do
               filename="$(basename "$tarball")"
-      
-              # Extract name and version from format: {NAME}.{VERSION}.tar.gz
-              # Assuming filename looks like: myproject.1.0.0.tar.gz
-              # We strip the .tar.gz extension first
-              base_no_ext="${filename%.tar.gz}"
-      
-              # Split by dots from the right or parse carefully
-              # Assuming version is the last part and name is the rest
+
               base_no_ext="${filename%.tar.gz}"
 
               version="$(echo "$base_no_ext" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$')"
