@@ -507,7 +507,7 @@ jobs:
               New_Features)     title="New Features" ;;
               Fixes)            title="Fixes" ;;
               Notes)            title="Notes" ;;
-            )
+            esac
 
             # Check if there is any global or project data for this section
             if [ -f "$CAT_DIR/$cat_type.global" ] || [ -f "$CAT_DIR/$cat_type.projects" ]; then
@@ -538,6 +538,7 @@ jobs:
 
           # Clean up our temporary working directory contents safely
           rm -rf "$CAT_DIR"
+
 
 
 
