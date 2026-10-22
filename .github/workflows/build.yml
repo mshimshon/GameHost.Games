@@ -58,27 +58,31 @@ jobs:
           echo "COMMITS:"
           echo "$COMMITS"
 
-          if echo "$COMMITS" | grep -iq '^trace:'; then
-            echo "release=fasle" >> "$GITHUB_OUTPUT"
+          # 1. Check for trace, note, or wip anywhere in the text using your exact pattern
+          if echo "$COMMITS" | grep -qP "(?i)\b(trace|note|wip)\b\s*:"; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if echo "$COMMITS" | grep -iq '^break:'; then
+          # 2. Check for major breaking changes
+          if echo "$COMMITS" | grep -qP "(?i)\bbreak\b\s*:"; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
 
-          elif echo "$COMMITS" | grep -iq '^feat:'; then
+          # 3. Check for new features
+          elif echo "$COMMITS" | grep -qP "(?i)\bfeat\b\s*:"; then
             MINOR=$((MINOR + 1))
             PATCH=0
 
-          elif echo "$COMMITS" | grep -iq '^fix:'; then
+          # 4. Check for bug fixes
+          elif echo "$COMMITS" | grep -qP "(?i)\bfix\b\s*:"; then
             PATCH=$((PATCH + 1))
 
+          # 5. Fallback if no valid token was found anywhere
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "Error this is not a release... there are no fix:,break: or feat:. commits!"
-            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Error: This is not a release... there are no fix:, break:, or feat: commits!"
             exit 0
           fi
 
