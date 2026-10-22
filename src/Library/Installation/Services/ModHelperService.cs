@@ -1,4 +1,4 @@
-﻿using GameHost.Core.Features;
+﻿using GameHost.Keys.Features;
 using GameHost.Games.Lib.Installation.Payloads.Responses.Mods;
 using LunaticPanel.Core.Utils.Abstraction.Plugin.Location;
 using System.Text.Json;

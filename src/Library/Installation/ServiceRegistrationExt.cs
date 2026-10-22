@@ -1,10 +1,10 @@
 ﻿using GameHost.Games.Lib.Installation.Optionals;
 using GameHost.Games.Lib.Installation.Services;
 using GameHost.Games.Lib.Installation.Services.Engine;
+using GameHost.Keys;
 using LunaticPanel.Core.Utils;
 using LunaticPanel.Core.Utils.Logging;
 using Microsoft.Extensions.DependencyInjection;
-using static GameHost.Core.BaseInfo;
 
 namespace GameHost.Games.Lib.Installation;
 
@@ -16,7 +16,7 @@ public static class ServiceRegistrationExt
         services.AddScoped<IServerBackupControl, DefaultServerBackupService>();
         services.AddScoped<IServerDebugControl, DefaultServerDebugControlService>();
         services.AddScoped<IDistroDependencyFileService, DistroDependencyFileService>();
-        services.AddPluginLocationUtilityService(AssemblyName);
+        services.AddPluginLocationUtilityService(GameHostKeys.ASSEMBLY_NAME);
         services.AddLinuxCommandUtilityService();
         services.AddCrazyReportUtilityService();
         services.AddSafeFileWriterUtilityService();
@@ -28,5 +28,4 @@ public static class ServiceRegistrationExt
         services.AddScoped<IModHelperService, ModHelperService>();
         services.AddScoped<IStartParamsHelper, StartParamsHelper>();
     }
-
 }

@@ -6,7 +6,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<Title>$(AssemblyName)</Title>
-		<Version>$(GlobalVersion)</Version>
+		<Version>1.0.0</Version>
 		<Company>$(GlobalCompany)</Company>
 		<Copyright>$(GlobalCopyright)</Copyright>
 		<Authors>$(GlobalAuthors)</Authors>
@@ -15,12 +15,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="LunaticPanel.Core.Utils" Version="*" />
-	  <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+		<PackageReference Include="GameHost.Keys" />
+		<PackageReference Include="LunaticPanel.Core.Utils"  />
+	  <PackageReference Include="Microsoft.Extensions.DependencyInjection"/>
 	</ItemGroup>
 
 	<ItemGroup>
-	  <ProjectReference Include="..\..\..\..\MaksimShimshon.GameManagePanel\src\GameHost.Core\GameHost.Core.csproj" />
 	  <ProjectReference Include="..\..\Library\Installation\Installation.csproj" />
 	  <ProjectReference Include="..\..\Library\LinuxGameServerManager.Extension\LinuxGameServerManager.Extension.csproj" />
 	  <ProjectReference Include="..\..\Library\LinuxGameServerManager\LinuxGameServerManager.csproj" />

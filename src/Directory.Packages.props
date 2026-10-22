@@ -1,0 +1,25 @@
+<Project>
+	<PropertyGroup>
+		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+		<GlobalVersion>0.0.100</GlobalVersion>
+		<GlobalCompany>Asylum Foundation™</GlobalCompany>
+		<GlobalAuthors>Asylum Foundation™</GlobalAuthors>
+		<GlobalCopyright>Asylum Foundation™ © 2026</GlobalCopyright>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageVersion Include="LunaticPanel.Core.Abstraction" Version="0.2.101" />
+		<PackageVersion Include="LunaticPanel.Core.Extensions" Version="0.2.101" />
+		<PackageVersion Include="LunaticPanel.Core.Utils" Version="0.2.101" />
+		<PackageVersion Include="LunaticPanel.Core.Utils.Abstraction" Version="0.2.101" />
+		<PackageVersion Include="LunaticPanel.Engine.Keys" Version="0.2.101" />
+		<PackageVersion Include="GameHost.Keys" Version="0.0.109" />
+		<PackageVersion Include="Microsoft.AspNetCore.Components" Version="0.2.101" />
+		<PackageVersion Include="System.CommandLine" Version="2.0.8" />
+		<PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.1" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+		<PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.12" />
+		<PackageVersion Include="MailKit" Version="4.18.1" />
+	</ItemGroup>
+</Project>

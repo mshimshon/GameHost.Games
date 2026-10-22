@@ -1,7 +1,7 @@
-﻿using GameHost.Core.Features;
-using GameHost.Games.Lib.Installation.Payloads.Responses;
-using GameHost.Games.Lib.Installation.Exceptions;
+﻿using GameHost.Games.Lib.Installation.Exceptions;
 using GameHost.Games.Lib.Installation.Extensions;
+using GameHost.Games.Lib.Installation.Payloads.Responses;
+using GameHost.Keys.Features;
 using LunaticPanel.Core.Utils.Abstraction.LinuxCommand;
 using LunaticPanel.Core.Utils.Abstraction.Plugin.Location;
 using LunaticPanel.Core.Utils.Abstraction.SafeFileWriter;
@@ -35,7 +35,12 @@ internal sealed class EngineInitializerService : IEngineInitializerService
         };
         var identityContentJson = JsonSerializer.Serialize(identityContent, BaseInfo.jsonSerializerOptions);
         await _safeFileWriter.WriteThenCopyFileAsync(identityFile, identityContentJson, ct);
-
+        var ensurePermissionSet = await _linuxCommand
+            .BuildCommand($"[ $(stat -c %u /home/{BaseInfo.USERNAME}) -eq $(id -u {BaseInfo.USERNAME}) ]")
+            .AndCommand($"[ $(stat -c %g /home/lgsm) -eq $(id -g {BaseInfo.USERNAME}) ] ")
+            .OrCommand($"chown -R {BaseInfo.USERNAME}:{BaseInfo.USERNAME} /home/{BaseInfo.USERNAME}")
+            .ExecAsync();
+        if (ensurePermissionSet.Failed) throw new PermissionSetFailedException();
         bool isUsernameCreated = await _linuxCommand.CheckUsernameExistCommand().ExecPayloadAsync<bool>(ct);
         if (!isUsernameCreated)
         {
