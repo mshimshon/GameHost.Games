@@ -414,9 +414,12 @@ jobs:
           echo "=========================================="
 
           mkdir -p "$OUTPUT_DIR"
-          [ ! -f "$MAIN_NOTES" ] && true > "$MAIN_NOTES"
 
-          # Define a safe POSIX newline sequence variable without splitting the line
+          # 1. Define the mandatory sorted structure if the file is new/empty
+          if [ ! -f "$MAIN_NOTES" ] || [ ! -s "$MAIN_NOTES" ]; then
+            printf "## BREAKING CHANGES\n\n## New Features\n\n## Fixes\n\n## Notes\n" > "$MAIN_NOTES"
+          fi
+
           NL='
           '
 
@@ -438,14 +441,33 @@ jobs:
                     section_content=$(printf "%s" "$section_content" | sed '/^$/d')
                     
                     if [ -n "$section_content" ]; then
+                      # Create the block to insert
                       printf "### %s %s\n%s\n" "$p_name" "$current_section" "$section_content" > /tmp/sec_insert.tmp
                       
-                      if grep -q "^## $current_section" "$MAIN_NOTES"; then
-                        sed -i "/^## $current_section/r /tmp/sec_insert.tmp" "$MAIN_NOTES"
-                      else
+                      # Ensure the main section header exists in the file
+                      if ! grep -q "^## $current_section" "$MAIN_NOTES"; then
                         printf "\n## %s\n" "$current_section" >> "$MAIN_NOTES"
-                        cat /tmp/sec_insert.tmp >> "$MAIN_NOTES"
                       fi
+
+                      # POSIX Compliant: Append to the BOTTOM of the matched section block
+                      # It finds the section header, then finds the NEXT header or EOF, and places it right before it
+                      awk -v sec="## $current_section" '
+                        BEGIN { found=0 }
+                        $0 == sec { found=1; print; next }
+                        found && /^## / { 
+                          while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
+                          close("/tmp/sec_insert.tmp");
+                          found=0;
+                        }
+                        { print }
+                        END { 
+                          if (found) {
+                            while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
+                            close("/tmp/sec_insert.tmp");
+                          }
+                        }
+                      ' "$MAIN_NOTES" > "$MAIN_NOTES.tmp" && mv "$MAIN_NOTES.tmp" "$MAIN_NOTES"
+                      
                       rm -f /tmp/sec_insert.tmp
                     fi
                   fi
@@ -456,34 +478,56 @@ jobs:
                   ;;
                 *)
                   if [ -n "$current_section" ]; then
-                    # Safely append line and newline variable without breaking column indent alignment
                     section_content="${section_content}${line}${NL}"
                   fi
                   ;;
               esac
             done < "$project_file"
 
+            # Flush final lingering section block safely using the same awk logic
             if [ -n "$current_section" ] && [ -n "$section_content" ]; then
               section_content=$(printf "%s" "$section_content" | sed '/^$/d')
               if [ -n "$section_content" ]; then
                 printf "### %s %s\n%s\n" "$p_name" "$current_section" "$section_content" > /tmp/sec_insert.tmp
-                if grep -q "^## $current_section" "$MAIN_NOTES"; then
-                  sed -i "/^## $current_section/r /tmp/sec_insert.tmp" "$MAIN_NOTES"
-                else
+                
+                if ! grep -q "^## $current_section" "$MAIN_NOTES"; then
                   printf "\n## %s\n" "$current_section" >> "$MAIN_NOTES"
-                  cat /tmp/sec_insert.tmp >> "$MAIN_NOTES"
                 fi
+
+                awk -v sec="## $current_section" '
+                  BEGIN { found=0 }
+                  $0 == sec { found=1; print; next }
+                  found && /^## / { 
+                    while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
+                    close("/tmp/sec_insert.tmp");
+                    found=0;
+                  }
+                  { print }
+                  END { 
+                    if (found) {
+                      while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
+                      close("/tmp/sec_insert.tmp");
+                    }
+                  }
+                ' "$MAIN_NOTES" > "$MAIN_NOTES.tmp" && mv "$MAIN_NOTES.tmp" "$MAIN_NOTES"
+                
                 rm -f /tmp/sec_insert.tmp
               fi
             fi
           done
 
-          cleaned_notes=$(cat "$MAIN_NOTES" | tr -s '\n')
-          echo "$cleaned_notes" > "$MAIN_NOTES"
+          # Clean up any missing or trailing newlines while maintaining sorting structure
+          # Uses awk to safely preserve paragraph blocks instead of crushing lines into a single mess
+          awk '
+            /^## / { print (NR==1 ? "" : "\n") $0; next }
+            /^### / { print "\n" $0; next }
+            { print }
+          ' "$MAIN_NOTES" | sed '/./,/^$/!d' > "$MAIN_NOTES.tmp" && mv "$MAIN_NOTES.tmp" "$MAIN_NOTES"
 
-          echo "=== [DEBUG] FINAL MERGED RELEASE NOTES ==="
+          echo "=== [DEBUG] FINAL SORTED MERGED RELEASE NOTES ==="
           cat "$MAIN_NOTES"
           echo "=========================================="
+
 
 
       - name: Publish Projects
