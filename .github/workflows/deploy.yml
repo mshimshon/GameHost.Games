@@ -155,7 +155,7 @@ jobs:
           echo "projectCommits=${projectCommits% }" >> $GITHUB_OUTPUT
 
 
-      - name: Generate Release Notes
+      - name: Generate Registry Release Notes
         if: steps.get_version.outputs.release == 'true'
         id: generate_release_notes
         run: |
@@ -204,9 +204,9 @@ jobs:
 
           echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Generate Release Notes
+      - name: Generate Console Release Notes
         if: steps.get_version.outputs.release == 'true'
-        id: generate_release_notes
+        id: generate_console_release_notes
         run: |
           set -eu
           OUTPUT_DIR="/tmp/artifacts/output"
@@ -221,7 +221,7 @@ jobs:
             # Extract name and version from format: csproj;version;name
             p_name=$(echo "$project" | cut -d';' -f3)
             p_version=$(echo "$project" | cut -d';' -f2)
-
+            // /tmp/artifacts/output
             # Define unique output file path for this project
             RELEASE_NOTES_FILE="$OUTPUT_DIR/${p_name}.md"
             echo "# Release Notes for $p_name ($p_version)" > "$RELEASE_NOTES_FILE"
@@ -364,6 +364,45 @@ jobs:
               exit 1
             }
           done
+      - name: Validation Console Release Notes
+        if: steps.get_version.outputs.release == 'true'
+        run: |
+          set -eu
+          releases="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
+          if [ -z "$releases" ]; then
+            echo "NO RELEASE FOUND"
+            exit 0
+          fi
+
+          OUTPUT_DIR="/tmp/artifacts/output"
+
+          for item in $releases; do
+            # Extract the project name (the 3rd field)
+            p_name=$(echo "$item" | cut -d';' -f3)
+            TARGET_FILE="$OUTPUT_DIR/${p_name}.md"
+
+            echo "Validating release notes for: $p_name"
+
+            # Check if file exists
+            if [ ! -f "$TARGET_FILE" ]; then
+              echo "::error::Release notes file missing for project '$p_name' at $TARGET_FILE"
+              exit 1
+            fi
+
+            # Check if file contains content beyond just its auto-generated header
+            # A file containing only '# Release Notes for Name (Version)' is technically empty of logs.
+            # -s checks if file size is greater than 0, but we should make sure it has real notes.
+            line_count=$(wc -l < "$TARGET_FILE")
+            
+            if [ "$line_count" -le 2 ]; then
+              echo "::error::Release notes file for '$p_name' is empty or missing details!"
+              exit 1
+            fi
+
+            echo "  -> OK ($TARGET_FILE exists and contains records)"
+          done
+
+          echo "All release note files validated successfully!"
 
       - name: Publish New Releases
         if: steps.get_version.outputs.release == 'true'
@@ -374,7 +413,7 @@ jobs:
 
           if [ -z "$releases" ]; then
             echo "NO RELEASE FOUND"
-            exit 1
+            exit 0
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/output/consoles"
@@ -477,14 +516,11 @@ jobs:
             tarball_files="$(find "$output_dir" -name '*.tar.gz' | sort)"
             for tarball in $tarball_files; do
               filename="$(basename "$tarball")"
-
               base_no_ext="${filename%.tar.gz}"
-
               name="${base_no_ext%.$version}"
-
               tag_name="${name}-v${version}"
               echo "Creating release $tag_name with file $filename..."
-              gh release create "$tag_name" "$tarball" --title "$tag_name" --notes "Release for $name version $version"
+              gh release create "$tag_name" "$tarball" --title "$tag_name" --notes-file "/tmp/artifacts/output/${name}.md"
             done
 
       - name: Release Registry
