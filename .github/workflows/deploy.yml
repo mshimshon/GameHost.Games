@@ -8,7 +8,7 @@ on:
   workflow_dispatch: # Keeps your manual trigger working
 
 concurrency:
-  group: deploy-${{ github.sha }}
+  group: workflow-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
