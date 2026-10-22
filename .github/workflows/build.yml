@@ -117,10 +117,119 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Discover Projects
+        if: steps.get_version.outputs.release == 'true'
+        id: project_discovery
+        run: |
+          allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
+          projectVersions=""
+          projectVersionToRelease=""
+          projectCommits=""
+
+          version="${{ steps.get_version.outputs.version }}"
+          
+          latest_tag=$(git tag -l "registry-*" | sort -V | tail -n 1)
+
+          while IFS= read -r csproj; do
+            [ -z "$csproj" ] && continue
+            name="$(basename "$csproj" .csproj)"
+            project_dir="$(dirname "$csproj")"
+            
+            echo "Processing project: $name ($version)"
+            projectVersions+="${csproj};${version};${name} "
+
+            if [ -n "$latest_tag" ]; then
+              echo "  Found last tag: $latest_tag"
+              affected_commits=$(git log --pretty=format:%H "$latest_tag"..HEAD -- "$project_dir" | tr '\n' ',' | sed 's/,$//')
+
+              if [ -n "$affected_commits" ]; then
+                echo "  -> Changes detected. Commits: $affected_commits"
+                projectVersionToRelease+="${csproj};${version};${name} "
+                projectCommits+="${name}:${affected_commits} "
+              else
+                echo "  -> No changes detected in $project_dir. Skipping release."
+              fi
+            else
+              echo "  -> No previous tag found for ${name}. Aggregating history."
+              affected_commits=$(git log --pretty=format:%H HEAD -- "$project_dir" | tr '\n' ',' | sed 's/,$//')
+              
+              if [ -z "$affected_commits" ]; then
+                affected_commits=$(git rev-parse HEAD)
+              fi
+              
+              projectVersionToRelease+="${csproj};${version};${name} "
+              projectCommits+="${name}:${affected_commits} "
+            fi
+          done <<< "$allProjects"
+
+          # [DEBUG LOGS] Print variables before saving to output
+          echo "=== [DEBUG] PROJECT DISCOVERY OUTPUTS ==="
+          echo "projectVersionToRelease: ${projectVersionToRelease% }"
+          echo "projectVersions: ${projectVersions% }"
+          echo "projectCommits: ${projectCommits% }"
+          echo "allProjects:"
+          echo "$allProjects"
+          echo "========================================="
+
+          # Save to outputs
+          echo "projectVersionToRelease=${projectVersionToRelease% }" >> $GITHUB_OUTPUT
+          echo "projectVersions=${projectVersions% }" >> $GITHUB_OUTPUT
+          echo "projectCommits=${projectCommits% }" >> $GITHUB_OUTPUT
+          
+          echo "allProjects<<EOF" >> $GITHUB_OUTPUT
+          echo "$allProjects" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate Registry Release Notes
+        if: steps.get_version.outputs.release == 'true'
+        id: generate_release_notes
+        run: |
+          set -eu
+          LAST_VERSION="${{ steps.get_version.outputs.previous_version }}"
+          
+          mkdir -p /tmp/artifacts/output
+          RELEASE_NOTES_FILE="/tmp/artifacts/output/release_notes.md"
+          true > "$RELEASE_NOTES_FILE"
+
+          RAW_LOGS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B)
+
+          # 1. Extract Breaking Changes
+          BREAKS=$(echo "$RAW_LOGS" | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$BREAKS" ]; then
+            echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n\n" "$BREAKS" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # 2. Extract Features
+          FEATS=$(echo "$RAW_LOGS" | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$FEATS" ]; then
+            echo "## New Features" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n\n" "$FEATS" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # 3. Extract Fixes
+          FIXES=$(echo "$RAW_LOGS" | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$FIXES" ]; then
+            echo "## Fixes" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n\n" "$FIXES" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # 4. Extract Notes
+          NOTES=$(echo "$RAW_LOGS" | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$NOTES" ]; then
+            echo "## Notes" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n\n" "$NOTES" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # [DEBUG LOGS] Print generated release notes
+          echo "=== [DEBUG] GENERATED RELEASE NOTES ==="
+          cat "$RELEASE_NOTES_FILE"
+          echo "======================================="
+
+          echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Publish Projects
         if: steps.get_version.outputs.release == 'true'
-        id: project_discovery
         run: |
           allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
           for csproj in $allProjects; do
