@@ -55,6 +55,9 @@ jobs:
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f2) 
           PATCH=$(echo "$VERSION" | cut -d. -f3) 
+          echo "COMMITS:"
+          echo "$COMMITS"
+
           if echo "$COMMITS" | grep -iq '^trace:'; then
             echo "release=fasle" >> "$GITHUB_OUTPUT"
             exit 0
