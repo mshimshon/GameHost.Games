@@ -182,33 +182,61 @@ jobs:
           NEXT_VERSION="${{ steps.get_version.outputs.version }}"
           PROJECT_COMMITS_MAP="${{ steps.project_discovery.outputs.projectCommits }}"
 
-          # 1. Parse out all commit SHAs assigned to console projects
-          # This replaces spaces with newlines, extracts the SHAs, converts commas to newlines, and strips empty lines
+          # 1. Parse out all commit SHAs assigned to console projects safely using POSIX utilities
+          # Converts spaces to newlines, extracts after the colon, converts commas to newlines, filters empty lines
           CONSOLE_SHAS=$(echo "$PROJECT_COMMITS_MAP" | tr ' ' '\n' | cut -d':' -f2- | tr ',' '\n' | grep -v '^$' || true)
 
-          # 2. Build the git log exclusion parameters (e.g., ^sha1 ^sha2 ...)
-          EXCLUDE_ARGS=""
-          if [ -n "$CONSOLE_SHAS" ]; then
-            while IFS= read -r sha; do
-              [ -z "$sha" ] && continue
-              EXCLUDE_ARGS="$EXCLUDE_ARGS ^$sha"
-            done <<< "$CONSOLE_SHAS"
-          fi
-
-          # 3. Grab full commit histories excluding console project commits
-          # We use eval here so the space-separated exclusion arguments (^SHA) are parsed correctly by git
-          RAW_LOGS=$(eval "git log \"v$LAST_VERSION\"..HEAD $EXCLUDE_ARGS --pretty=format:%B" || true)
-          COMMITS=$(eval "git log \"v$LAST_VERSION\"..HEAD $EXCLUDE_ARGS --pretty=format:%s" || true)
-
-          # [DEBUG LOGS] Check raw versions, exclusions, and filtered commit subjects
+          # [DEBUG LOGS] Check inputs from discovery step
           echo "=== [DEBUG] REGISTRY RELEASE NOTES INPUTS ==="
           echo "LAST_VERSION: $LAST_VERSION"
           echo "NEXT_VERSION: $NEXT_VERSION"
           echo "Excluded Console SHAs:"
           echo "$CONSOLE_SHAS"
+          echo "============================================="
+
+          # 2. Grab ALL commits first, printing the hash followed by the content (%H %B or %H %s)
+          ALL_RAW_LOGS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:"COMMIT_SHA:%H%n%B" || true)
+          ALL_SUBJECTS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:"%H %s" || true)
+
+          # 3. Filter out lines using POSIX grep if console SHAs exist
+          if [ -n "$CONSOLE_SHAS" ]; then
+            # Filter subjects by excluding any lines starting with the console hashes
+            COMMITS=$(echo "$ALL_SUBJECTS" | grep -Fv "$CONSOLE_SHAS" | cut -d' ' -f2- || true)
+            
+            # For full bodies, convert to a single-line tracker format temporarily to filter safely
+            # We filter out the exact block matching the console SHAs using a loop or by matching commit tracking lines
+            RAW_LOGS=""
+            current_commit_valid=1
+            
+            # Read line by line over the raw logs to properly strip blocks tied to excluded SHAs
+            echo "$ALL_RAW_LOGS" | while IFS= read -r line; do
+              case "$line" in
+                COMMIT_SHA:*)
+                  sha=$(echo "$line" | cut -d':' -f2)
+                  current_commit_valid=1
+                  # Check if this SHA is in our console list
+                  if echo "$CONSOLE_SHAS" | grep -q "$sha"; then
+                    current_commit_valid=0
+                  fi
+                  ;;
+                *)
+                  if [ "$current_commit_valid" -eq 1 ]; then
+                    echo "$line"
+                  fi
+                  ;;
+              esac
+            done > /tmp/filtered_raw_logs.txt
+            RAW_LOGS=$(cat /tmp/filtered_raw_logs.txt)
+          else
+            COMMITS=$(echo "$ALL_SUBJECTS" | cut -d' ' -f2- || true)
+            RAW_LOGS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B || true)
+          fi
+
+          # [DEBUG LOGS] View what registry logs actually remain after filtration
+          echo "=== [DEBUG] CAPTURED COMMITS ==="
           echo "Registry-Only Commit Subjects:"
           echo "$COMMITS"
-          echo "============================================="
+          echo "================================="
 
           mkdir -p /tmp/artifacts/output
           RELEASE_NOTES_FILE="/tmp/artifacts/output/release_notes.md"
@@ -252,7 +280,6 @@ jobs:
           echo "================================================"
 
           echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
-
 
       - name: Generate Console Release Notes
         if: steps.get_version.outputs.release == 'true'
