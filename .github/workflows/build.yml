@@ -466,7 +466,7 @@ jobs:
                       printf "### %s %s\n%s\n\n" "$p_name" "$current_section" "$section_content" >> "$CAT_DIR/$current_section.projects"
                     fi
                   fi
-                  # Normalize section names to match folder structures cleanly
+                  # Normalize section names to match folder structures cleanly 
                   raw_sec=$(echo "$line" | sed 's/^## //')
                   case "$raw_sec" in
                     "BREAKING CHANGES"*) current_section="BREAKING_CHANGES" ;;
