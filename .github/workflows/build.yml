@@ -401,6 +401,89 @@ jobs:
 
           echo "output_directory=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 
+      - name: Merge Project Release Notes
+        if: steps.get_version.outputs.release == 'true'
+        id: merge_release_notes
+        run: |
+          set -eu
+          OUTPUT_DIR="/tmp/artifacts/output"
+          MAIN_NOTES="$OUTPUT_DIR/release_notes.md"
+
+          echo "=== [DEBUG] INITIAL MAIN RELEASE NOTES ==="
+          if [ -f "$MAIN_NOTES" ]; then cat "$MAIN_NOTES"; else echo "(File does not exist yet)"; fi
+          echo "=========================================="
+
+          mkdir -p "$OUTPUT_DIR"
+          [ ! -f "$MAIN_NOTES" ] && true > "$MAIN_NOTES"
+
+          # Define a safe POSIX newline sequence variable without splitting the line
+          NL='
+          '
+
+          for project_file in "$OUTPUT_DIR"/*.md; do
+            [ ! -f "$project_file" ] && continue
+            filename=$(basename "$project_file")
+            [ "$filename" = "release_notes.md" ] && continue
+
+            p_name="${filename%.md}"
+            echo "Processing project file: $filename -> Project: $p_name"
+
+            current_section=""
+            section_content=""
+
+            while IFS= read -r line || [ -n "$line" ]; do
+              case "$line" in
+                "## "*) 
+                  if [ -n "$current_section" ] && [ -n "$section_content" ]; then
+                    section_content=$(printf "%s" "$section_content" | sed '/^$/d')
+                    
+                    if [ -n "$section_content" ]; then
+                      printf "### %s %s\n%s\n" "$p_name" "$current_section" "$section_content" > /tmp/sec_insert.tmp
+                      
+                      if grep -q "^## $current_section" "$MAIN_NOTES"; then
+                        sed -i "/^## $current_section/r /tmp/sec_insert.tmp" "$MAIN_NOTES"
+                      else
+                        printf "\n## %s\n" "$current_section" >> "$MAIN_NOTES"
+                        cat /tmp/sec_insert.tmp >> "$MAIN_NOTES"
+                      fi
+                      rm -f /tmp/sec_insert.tmp
+                    fi
+                  fi
+                  current_section=$(echo "$line" | sed 's/^## //')
+                  section_content=""
+                  ;;
+                "#"*)
+                  ;;
+                *)
+                  if [ -n "$current_section" ]; then
+                    # Safely append line and newline variable without breaking column indent alignment
+                    section_content="${section_content}${line}${NL}"
+                  fi
+                  ;;
+              esac
+            done < "$project_file"
+
+            if [ -n "$current_section" ] && [ -n "$section_content" ]; then
+              section_content=$(printf "%s" "$section_content" | sed '/^$/d')
+              if [ -n "$section_content" ]; then
+                printf "### %s %s\n%s\n" "$p_name" "$current_section" "$section_content" > /tmp/sec_insert.tmp
+                if grep -q "^## $current_section" "$MAIN_NOTES"; then
+                  sed -i "/^## $current_section/r /tmp/sec_insert.tmp" "$MAIN_NOTES"
+                else
+                  printf "\n## %s\n" "$current_section" >> "$MAIN_NOTES"
+                  cat /tmp/sec_insert.tmp >> "$MAIN_NOTES"
+                fi
+                rm -f /tmp/sec_insert.tmp
+              fi
+            fi
+          done
+
+          cleaned_notes=$(cat "$MAIN_NOTES" | tr -s '\n')
+          echo "$cleaned_notes" > "$MAIN_NOTES"
+
+          echo "=== [DEBUG] FINAL MERGED RELEASE NOTES ==="
+          cat "$MAIN_NOTES"
+          echo "=========================================="
 
 
       - name: Publish Projects
