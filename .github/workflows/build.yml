@@ -227,6 +227,147 @@ jobs:
           echo "======================================="
 
           echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
+      - name: Generate Console Release Notes
+        if: steps.get_version.outputs.release == 'true'
+        id: generate_console_release_notes
+        run: |
+          set -eu
+          OUTPUT_DIR="/tmp/artifacts/output"
+          mkdir -p "$OUTPUT_DIR"
+
+          # 1. Grab our space-separated lists from the discovery output variables
+          PROJECTS_TO_RELEASE="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
+          PROJECT_COMMITS_MAP="${{ steps.project_discovery.outputs.projectCommits }}"
+
+          # [DEBUG LOGS] Check inputs from discovery step
+          echo "=== [DEBUG] CONSOLE RELEASES INPUTS ==="
+          echo "PROJECTS_TO_RELEASE: $PROJECTS_TO_RELEASE"
+          echo "PROJECT_COMMITS_MAP: $PROJECT_COMMITS_MAP"
+          echo "======================================="
+
+          # 2. Iterate through each project that requires a release
+          for project in $PROJECTS_TO_RELEASE; do
+            # Extract name and version from format: csproj;version;name
+            p_name=$(echo "$project" | cut -d';' -f3)
+            p_version=$(echo "$project" | cut -d';' -f2)
+
+            # Define unique output file path for this project
+            RELEASE_NOTES_FILE="$OUTPUT_DIR/${p_name}.md"
+            echo "# Release Notes for $p_name ($p_version)" > "$RELEASE_NOTES_FILE"
+
+            # 3. Find this project's matching entry in the projectCommits list
+            p_match=""
+            for entry in $PROJECT_COMMITS_MAP; do
+              case "$entry" in
+                "$p_name":*) p_match="$entry" ; break ;;
+              esac
+            done
+
+            # Skip to next project if no explicit commits are associated with it
+            if [ -z "$p_match" ]; then
+              echo "  [DEBUG] No commits found matching project: $p_name"
+              continue
+            fi
+            
+            # Isolate just the comma-separated SHAs and convert them to spaces for looping
+            raw_shas=$(echo "$p_match" | cut -d':' -f2)
+            commit_pool=$(echo "$raw_shas" | tr ',' ' ')
+
+            echo "  [DEBUG] Processing $p_name with commits: $commit_pool"
+
+            # Initialize accumulated holders for current project's tokens
+            breaks=""
+            feats=""
+            fixes=""
+            notes=""
+            commits=""
+
+            # 4. Iterate over only the specific commits that touched this project
+            for sha in $commit_pool; do
+              [ -z "$sha" ] && continue
+              
+              # Grab full commit body text and the single line subject
+              commit_body=$(git log -1 --pretty=format:%B "$sha")
+              commit_subject=$(git log -1 --pretty=format:%s "$sha")
+
+              # Extract conventional tokens line-by-line using POSIX sh structures
+              c_break=$(echo "$commit_body" | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
+              c_feat=$(echo "$commit_body" | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
+              c_fix=$(echo "$commit_body" | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
+              c_note=$(echo "$commit_body" | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
+
+              # Track if this commit matched any specified structural keywords
+              matched=0
+
+              if [ -n "$c_break" ]; then
+                breaks="${breaks}${c_break}
+"
+                matched=1
+              fi
+              if [ -n "$c_feat" ]; then
+                feats="${feats}${c_feat}
+"
+                matched=1
+              fi
+              if [ -n "$c_fix" ]; then
+                fixes="${fixes}${c_fix}
+"
+                matched=1
+              fi
+              if [ -n "$c_note" ]; then
+                notes="${notes}${c_note}
+"
+                matched=1
+              fi
+
+              # If it did NOT match any conventional tokens, save it under the fallback group
+              if [ "$matched" -eq 0 ] && [ -n "$commit_subject" ]; then
+                commits="${commits}- ${commit_subject}
+"
+              fi
+            done
+
+            # 5. Append organized headers and list segments to the project file
+            if [ -n "$breaks" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$breaks" >> "$RELEASE_NOTES_FILE"
+            fi
+
+            if [ -n "$feats" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## New Features" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$feats" >> "$RELEASE_NOTES_FILE"
+            fi
+
+            if [ -n "$fixes" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## Fixes" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$fixes" >> "$RELEASE_NOTES_FILE"
+            fi
+
+            if [ -n "$notes" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## Notes" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$notes" >> "$RELEASE_NOTES_FILE"
+            fi
+
+            if [ -n "$commits" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## Commits" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$commits" >> "$RELEASE_NOTES_FILE"
+            fi
+            
+            echo "Successfully generated: $RELEASE_NOTES_FILE"
+
+            # [DEBUG LOGS] Print the contents of the generated project file
+            echo "=== [DEBUG] CONTENTS FOR $p_name ==="
+            cat "$RELEASE_NOTES_FILE"
+            echo "====================================="
+          done
+
+          # Return the entire base directory path instead of a single document
+          echo "output_directory=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Publish Projects
         if: steps.get_version.outputs.release == 'true'
