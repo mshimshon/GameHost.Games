@@ -32,6 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # 👈 This forces GitHub to pull ALL history and tags 
+
       - name: Calculate Version
         id: get_version
         run: |
@@ -100,7 +101,7 @@ jobs:
             echo "[DEBUG] Match found for: fix token. Incrementing PATCH version."
             PATCH=$((PATCH + 1))
 
-          # 5. Fallback if no valid token was found anywhere 
+          # 5. Fallback if no valid token was found anywhere
           else
             echo "[DEBUG] Error: Code path reached baseline fallback. No fix:, break:, or feat: commits discovered in the collection."
             echo "release=false" >> "$GITHUB_OUTPUT"
@@ -119,11 +120,12 @@ jobs:
           echo "release=true" >> "$GITHUB_OUTPUT"
           echo "[DEBUG] All output parameters appended safely to GITHUB_OUTPUT. Script complete."
 
-      - name: Setup .NET 10
+
+      - name: Setup .NET 10 SDK
         if: steps.get_version.outputs.release == 'true'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.x'
+          dotnet-version: '10.0.x'
 
       - name: Discover Projects
         if: steps.get_version.outputs.release == 'true'
@@ -180,181 +182,114 @@ jobs:
           echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
           echo "projectCommits=${projectCommits% }" >> $GITHUB_OUTPUT
 
-
       - name: Generate Registry Release Notes
         if: steps.get_version.outputs.release == 'true'
         id: generate_release_notes
         run: |
+          # HEAVILY AI GENERATED
           set -eu
           LAST_VERSION="${{ steps.get_version.outputs.previous_version }}"
           NEXT_VERSION="${{ steps.get_version.outputs.version }}"
-          COMMITS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%s) 
+          PROJECT_COMMITS_MAP="${{ steps.project_discovery.outputs.projectCommits }}"
 
-          
+          # 1. Parse out all commit SHAs assigned to console projects safely using POSIX utilities
+          # Converts spaces to newlines, extracts after the colon, converts commas to newlines, filters empty lines
+          CONSOLE_SHAS=$(echo "$PROJECT_COMMITS_MAP" | tr ' ' '\n' | cut -d':' -f2- | tr ',' '\n' | grep -v '^$' || true)
+
+          # [DEBUG LOGS] Check inputs from discovery step
+          echo "=== [DEBUG] REGISTRY RELEASE NOTES INPUTS ==="
+          echo "LAST_VERSION: $LAST_VERSION"
+          echo "NEXT_VERSION: $NEXT_VERSION"
+          echo "Excluded Console SHAs:"
+          echo "$CONSOLE_SHAS"
+          echo "============================================="
+
+          # 2. Grab ALL commits first, printing the hash followed by the content (%H %B or %H %s)
+          ALL_RAW_LOGS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:"COMMIT_SHA:%H%n%B" || true)
+          ALL_SUBJECTS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:"%H %s" || true)
+
+          # 3. Filter out lines using POSIX grep if console SHAs exist
+          if [ -n "$CONSOLE_SHAS" ]; then
+            # Filter subjects by excluding any lines starting with the console hashes
+            COMMITS=$(echo "$ALL_SUBJECTS" | grep -Fv "$CONSOLE_SHAS" | cut -d' ' -f2- || true)
+            
+            # For full bodies, convert to a single-line tracker format temporarily to filter safely
+            # We filter out the exact block matching the console SHAs using a loop or by matching commit tracking lines
+            RAW_LOGS=""
+            current_commit_valid=1
+            
+            # Read line by line over the raw logs to properly strip blocks tied to excluded SHAs
+            echo "$ALL_RAW_LOGS" | while IFS= read -r line; do
+              case "$line" in
+                COMMIT_SHA:*)
+                  sha=$(echo "$line" | cut -d':' -f2)
+                  current_commit_valid=1
+                  # Check if this SHA is in our console list
+                  if echo "$CONSOLE_SHAS" | grep -q "$sha"; then
+                    current_commit_valid=0
+                  fi
+                  ;;
+                *)
+                  if [ "$current_commit_valid" -eq 1 ]; then
+                    echo "$line"
+                  fi
+                  ;;
+              esac
+            done > /tmp/filtered_raw_logs.txt
+            RAW_LOGS=$(cat /tmp/filtered_raw_logs.txt)
+          else
+            COMMITS=$(echo "$ALL_SUBJECTS" | cut -d' ' -f2- || true)
+            RAW_LOGS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B || true)
+          fi
+
+          # [DEBUG LOGS] View what registry logs actually remain after filtration
+          echo "=== [DEBUG] CAPTURED COMMITS ==="
+          echo "Registry-Only Commit Subjects:"
+          echo "$COMMITS"
+          echo "================================="
+
           mkdir -p /tmp/artifacts/output
           RELEASE_NOTES_FILE="/tmp/artifacts/output/release_notes.md"
-          echo "" > "$RELEASE_NOTES_FILE"
+          true > "$RELEASE_NOTES_FILE" 
 
-          # 1. Extract Breaking Changes from FULL commit bodies (%B)
-          BREAKS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 4. Extract Breaking Changes from the FILTERED logs
+          BREAKS=$(echo "$RAW_LOGS" | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$BREAKS" ]; then
             echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$BREAKS" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
-          # 2. Extract Features from FULL commit bodies (%B)
-          FEATS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 5. Extract Features from the FILTERED logs
+          FEATS=$(echo "$RAW_LOGS" | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$FEATS" ]; then
             echo "## New Features" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$FEATS" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
-          # 3. Extract Fixes from FULL commit bodies (%B)
-          FIXES=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 6. Extract Fixes from the FILTERED logs
+          FIXES=$(echo "$RAW_LOGS" | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$FIXES" ]; then
             echo "## Fixes" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$FIXES" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
-          # 4. Extract Notes from FULL commit bodies (%B)
-          NOTES=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 7. Extract Notes from the FILTERED logs
+          NOTES=$(echo "$RAW_LOGS" | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$NOTES" ]; then
             echo "## Notes" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$NOTES" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
+          # [DEBUG LOGS] Print out the final file contents
+          echo "=== [DEBUG] GENERATED REGISTRY RELEASE NOTES ==="
+          cat "$RELEASE_NOTES_FILE"
+          echo "================================================"
 
           echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
-
-      - name: Generate Console Release Notes
-        if: steps.get_version.outputs.release == 'true'
-        id: generate_console_release_notes
-        run: |
-          set -eu
-          OUTPUT_DIR="/tmp/artifacts/output"
-          mkdir -p "$OUTPUT_DIR"
-
-          # 1. Grab our space-separated lists from the discovery output variables
-          PROJECTS_TO_RELEASE="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
-          PROJECT_COMMITS_MAP="${{ steps.project_discovery.outputs.projectCommits }}"
-
-          # 2. Iterate through each project that requires a release
-          for project in $PROJECTS_TO_RELEASE; do
-            # Extract name and version from format: csproj;version;name
-            p_name=$(echo "$project" | cut -d';' -f3)
-            p_version=$(echo "$project" | cut -d';' -f2)
-            // /tmp/artifacts/output
-            # Define unique output file path for this project
-            RELEASE_NOTES_FILE="$OUTPUT_DIR/${p_name}.md"
-            echo "# Release Notes for $p_name ($p_version)" > "$RELEASE_NOTES_FILE"
-
-            # 3. Find this project's matching entry in the projectCommits list
-            p_match=""
-            for entry in $PROJECT_COMMITS_MAP; do
-              case "$entry" in
-                "$p_name":*) p_match="$entry" ; break ;;
-              esac
-            done
-
-            # Skip to next project if no explicit commits are associated with it
-            [ -z "$p_match" ] && continue
-            
-            # Isolate just the comma-separated SHAs and convert them to spaces for looping
-            raw_shas=$(echo "$p_match" | cut -d':' -f2)
-            commit_pool=$(echo "$raw_shas" | tr ',' ' ')
-
-            # Initialize accumulated holders for current project's tokens
-            breaks=""
-            feats=""
-            fixes=""
-            notes=""
-            commits=""
-
-            # 4. Iterate over only the specific commits that touched this project
-            for sha in $commit_pool; do
-              [ -z "$sha" ] && continue
-              
-              # Grab full commit body text and the single line subject
-              commit_body=$(git log -1 --pretty=format:%B "$sha")
-              commit_subject=$(git log -1 --pretty=format:%s "$sha")
-
-              # Extract conventional tokens line-by-line using POSIX sh structures
-              c_break=$(echo "$commit_body" | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
-              c_feat=$(echo "$commit_body" | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
-              c_fix=$(echo "$commit_body" | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
-              c_note=$(echo "$commit_body" | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
-
-              # Track if this commit matched any specified structural keywords
-              matched=0
-
-              if [ -n "$c_break" ]; then
-                breaks="${breaks}${c_break}
-                "
-                matched=1
-              fi
-              if [ -n "$c_feat" ]; then
-                feats="${feats}${c_feat}
-                "
-                matched=1
-              fi
-              if [ -n "$c_fix" ]; then
-                fixes="${fixes}${c_fix}
-                "
-                matched=1
-              fi
-              if [ -n "$c_note" ]; then
-                notes="${notes}${c_note}
-                "
-                matched=1
-              fi
-
-              # If it did NOT match any conventional tokens, save it under the fallback group
-              if [ "$matched" -eq 0 ] && [ -n "$commit_subject" ]; then
-                commits="${commits}- ${commit_subject}
-                "
-              fi
-            done
-
-            # 5. Append organized headers and list segments to the project file
-            if [ -n "$breaks" ]; then
-              echo "" >> "$RELEASE_NOTES_FILE"
-              echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
-              printf "%s" "$breaks" >> "$RELEASE_NOTES_FILE"
-            fi
-
-            if [ -n "$feats" ]; then
-              echo "" >> "$RELEASE_NOTES_FILE"
-              echo "## New Features" >> "$RELEASE_NOTES_FILE"
-              printf "%s" "$feats" >> "$RELEASE_NOTES_FILE"
-            fi
-
-            if [ -n "$fixes" ]; then
-              echo "" >> "$RELEASE_NOTES_FILE"
-              echo "## Fixes" >> "$RELEASE_NOTES_FILE"
-              printf "%s" "$fixes" >> "$RELEASE_NOTES_FILE"
-            fi
-
-            if [ -n "$notes" ]; then
-              echo "" >> "$RELEASE_NOTES_FILE"
-              echo "## Notes" >> "$RELEASE_NOTES_FILE"
-              printf "%s" "$notes" >> "$RELEASE_NOTES_FILE"
-            fi
-
-            if [ -n "$commits" ]; then
-              echo "" >> "$RELEASE_NOTES_FILE"
-              echo "## Commits" >> "$RELEASE_NOTES_FILE"
-              printf "%s" "$commits" >> "$RELEASE_NOTES_FILE"
-            fi
-            
-            echo "Successfully generated: $RELEASE_NOTES_FILE"
-          done
-
-          # Return the entire base directory path instead of a single document
-          echo "output_directory=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
 
 
 

@@ -177,6 +177,7 @@ jobs:
         if: steps.get_version.outputs.release == 'true'
         id: generate_release_notes
         run: |
+          # HEAVILY AI GENERATED
           set -eu
           LAST_VERSION="${{ steps.get_version.outputs.previous_version }}"
           NEXT_VERSION="${{ steps.get_version.outputs.version }}"
@@ -285,6 +286,7 @@ jobs:
         if: steps.get_version.outputs.release == 'true'
         id: generate_console_release_notes
         run: |
+          # HEAVILY AI GENERATED
           set -eu
           OUTPUT_DIR="/tmp/artifacts/output"
           mkdir -p "$OUTPUT_DIR"
@@ -405,6 +407,7 @@ jobs:
         if: steps.get_version.outputs.release == 'true'
         id: merge_release_notes
         run: |
+          # HEAVILY AI GENERATED
           set -eu
           OUTPUT_DIR="/tmp/artifacts/output"
           MAIN_NOTES="$OUTPUT_DIR/release_notes.md"
@@ -422,10 +425,10 @@ jobs:
             current_cat=""
             while IFS= read -r line || [ -n "$line" ]; do
               case "$line" in
-                "## BREAKING CHANGES"*) current_cat=" (Breaking Changes)" ;;
-                "## New Features"*)     current_cat="(New Features)" ;;
-                "## Fixes"*)            current_cat="(Fixes)" ;;
-                "## Notes"*)            current_cat="(Notes)" ;;
+                "## BREAKING CHANGES"*) current_cat="BREAKING_CHANGES" ;;
+                "## New Features"*)     current_cat="New_Features" ;;
+                "## Fixes"*)            current_cat="Fixes" ;;
+                "## Notes"*)            current_cat="Notes" ;;
                 "## "*)                 current_cat="" ;; # Ignore unknown root sections
                 *)
                   if [ -n "$current_cat" ] && [ -n "$line" ]; then
@@ -495,13 +498,13 @@ jobs:
 
           # Order Token Sequence: BREAKING_CHANGES -> New_Features -> Fixes -> Notes
           for cat_type in BREAKING_CHANGES New_Features Fixes Notes; do
-            title=""
+            # Format headers gracefully back to standard titles
             case "$cat_type" in
               BREAKING_CHANGES) title="BREAKING CHANGES" ;;
               New_Features)     title="New Features" ;;
               Fixes)            title="Fixes" ;;
               Notes)            title="Notes" ;;
-            esac
+            )
 
             # Check if there is any global or project data for this section
             if [ -f "$CAT_DIR/$cat_type.global" ] || [ -f "$CAT_DIR/$cat_type.projects" ]; then
