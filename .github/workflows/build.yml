@@ -117,6 +117,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
       - name: Discover Projects
         if: steps.get_version.outputs.release == 'true'
         id: project_discovery
@@ -172,7 +173,6 @@ jobs:
           echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
           echo "projectCommits=${projectCommits% }" >> $GITHUB_OUTPUT
 
-
       - name: Generate Registry Release Notes
         if: steps.get_version.outputs.release == 'true'
         id: generate_release_notes
@@ -180,46 +180,66 @@ jobs:
           set -eu
           LAST_VERSION="${{ steps.get_version.outputs.previous_version }}"
           NEXT_VERSION="${{ steps.get_version.outputs.version }}"
-          COMMITS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%s) 
+          PROJECT_COMMITS_MAP="${{ steps.project_discovery.outputs.projectCommits }}"
 
-          # [DEBUG LOGS] Check raw versions and commit subjects
+          # 1. Parse out all commit SHAs assigned to console projects
+          # This replaces spaces with newlines, extracts the SHAs, converts commas to newlines, and strips empty lines
+          CONSOLE_SHAS=$(echo "$PROJECT_COMMITS_MAP" | tr ' ' '\n' | cut -d':' -f2- | tr ',' '\n' | grep -v '^$' || true)
+
+          # 2. Build the git log exclusion parameters (e.g., ^sha1 ^sha2 ...)
+          EXCLUDE_ARGS=""
+          if [ -n "$CONSOLE_SHAS" ]; then
+            while IFS= read -r sha; do
+              [ -z "$sha" ] && continue
+              EXCLUDE_ARGS="$EXCLUDE_ARGS ^$sha"
+            done <<< "$CONSOLE_SHAS"
+          fi
+
+          # 3. Grab full commit histories excluding console project commits
+          # We use eval here so the space-separated exclusion arguments (^SHA) are parsed correctly by git
+          RAW_LOGS=$(eval "git log \"v$LAST_VERSION\"..HEAD $EXCLUDE_ARGS --pretty=format:%B" || true)
+          COMMITS=$(eval "git log \"v$LAST_VERSION\"..HEAD $EXCLUDE_ARGS --pretty=format:%s" || true)
+
+          # [DEBUG LOGS] Check raw versions, exclusions, and filtered commit subjects
           echo "=== [DEBUG] REGISTRY RELEASE NOTES INPUTS ==="
           echo "LAST_VERSION: $LAST_VERSION"
           echo "NEXT_VERSION: $NEXT_VERSION"
-          echo "Found commit subjects:"
+          echo "Excluded Console SHAs:"
+          echo "$CONSOLE_SHAS"
+          echo "Registry-Only Commit Subjects:"
           echo "$COMMITS"
           echo "============================================="
 
           mkdir -p /tmp/artifacts/output
           RELEASE_NOTES_FILE="/tmp/artifacts/output/release_notes.md"
-          true > "$RELEASE_NOTES_FILE" # Clears file without leaving a blank line at the top
+          true > "$RELEASE_NOTES_FILE" 
 
-          # 1. Extract Breaking Changes from FULL commit bodies (%B)
-          BREAKS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 4. Extract Breaking Changes from the FILTERED logs
+          BREAKS=$(echo "$RAW_LOGS" | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$BREAKS" ]; then
             echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$BREAKS" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
-          # 2. Extract Features from FULL commit bodies (%B)
-          FEATS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 5. Extract Features from the FILTERED logs
+          FEATS=$(echo "$RAW_LOGS" | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$FEATS" ]; then
             echo "## New Features" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$FEATS" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
-          # 3. Extract Fixes from FULL commit bodies (%B)
-          FIXES=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 6. Extract Fixes from the FILTERED logs
+          FIXES=$(echo "$RAW_LOGS" | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$FIXES" ]; then
             echo "## Fixes" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$FIXES" >> "$RELEASE_NOTES_FILE"
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
-          # 4. Extract Notes from FULL commit bodies (%B)
-          NOTES=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
+          # 7. Extract Notes from the FILTERED logs
+          NOTES=$(echo "$RAW_LOGS" | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
           if [ -n "$NOTES" ]; then
             echo "## Notes" >> "$RELEASE_NOTES_FILE"
             printf "%s\n" "$NOTES" >> "$RELEASE_NOTES_FILE"
