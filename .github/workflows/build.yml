@@ -495,13 +495,13 @@ jobs:
 
           # Order Token Sequence: BREAKING_CHANGES -> New_Features -> Fixes -> Notes
           for cat_type in BREAKING_CHANGES New_Features Fixes Notes; do
-            # Format headers gracefully back to standard titles
+            title=""
             case "$cat_type" in
               BREAKING_CHANGES) title="BREAKING CHANGES" ;;
               New_Features)     title="New Features" ;;
               Fixes)            title="Fixes" ;;
               Notes)            title="Notes" ;;
-            )
+            esac
 
             # Check if there is any global or project data for this section
             if [ -f "$CAT_DIR/$cat_type.global" ] || [ -f "$CAT_DIR/$cat_type.projects" ]; then
