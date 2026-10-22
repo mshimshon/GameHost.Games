@@ -100,7 +100,7 @@ jobs:
             echo "[DEBUG] Match found for: fix token. Incrementing PATCH version."
             PATCH=$((PATCH + 1))
 
-          # 5. Fallback if no valid token was found anywhere
+          # 5. Fallback if no valid token was found anywhere 
           else
             echo "[DEBUG] Error: Code path reached baseline fallback. No fix:, break:, or feat: commits discovered in the collection."
             echo "release=false" >> "$GITHUB_OUTPUT"
