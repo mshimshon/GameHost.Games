@@ -41,8 +41,10 @@ jobs:
             echo "::error::This directory is not a Git repository. Did you forget actions/checkout?"
             exit 1
           fi
+
           HEAD_COMMIT=$(git log -1 --pretty=format:%s)
           if echo "$HEAD_COMMIT" | grep -Eiq '\btrace[[:space:]]*:'; then
+            echo "Found Trace in HEAD... Skipping"
             echo "release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
