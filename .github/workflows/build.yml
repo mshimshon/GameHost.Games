@@ -10,8 +10,10 @@ on:
 jobs:
   build:
     if: |
-      !contains(github.event.workflow_run.head_commit.message, 'trace:') &&
-      !contains(github.event.workflow_run.head_commit.message, 'trace :')
+      ${{
+        !contains(github.event.workflow_run.head_commit.message, 'trace:') &&
+        !contains(github.event.workflow_run.head_commit.message, 'trace :')
+      }}
     runs-on: ubuntu-latest
     env:
       DOTNET_TEST_RUNNER: Microsoft.Testing.Platform
