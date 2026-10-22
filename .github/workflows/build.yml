@@ -408,21 +408,38 @@ jobs:
           set -eu
           OUTPUT_DIR="/tmp/artifacts/output"
           MAIN_NOTES="$OUTPUT_DIR/release_notes.md"
+          CAT_DIR="/tmp/categories"
 
           echo "=== [DEBUG] INITIAL MAIN RELEASE NOTES ==="
           if [ -f "$MAIN_NOTES" ]; then cat "$MAIN_NOTES"; else echo "(File does not exist yet)"; fi
           echo "=========================================="
 
           mkdir -p "$OUTPUT_DIR"
+          mkdir -p "$CAT_DIR"
 
-          # 1. Define the mandatory sorted structure if the file is new/empty
-          if [ ! -f "$MAIN_NOTES" ] || [ ! -s "$MAIN_NOTES" ]; then
-            printf "## BREAKING CHANGES\n\n## New Features\n\n## Fixes\n\n## Notes\n" > "$MAIN_NOTES"
+          # 1. Back up any existing global release notes content into our category tracking blocks
+          if [ -f "$MAIN_NOTES" ] && [ -s "$MAIN_NOTES" ]; then
+            current_cat=""
+            while IFS= read -r line || [ -n "$line" ]; do
+              case "$line" in
+                "## BREAKING CHANGES"*) current_cat="BREAKING_CHANGES" ;;
+                "## New Features"*)     current_cat="New_Features" ;;
+                "## Fixes"*)            current_cat="Fixes" ;;
+                "## Notes"*)            current_cat="Notes" ;;
+                "## "*)                 current_cat="" ;; # Ignore unknown root sections
+                *)
+                  if [ -n "$current_cat" ] && [ -n "$line" ]; then
+                    printf "%s\n" "$line" >> "$CAT_DIR/$current_cat.global"
+                  fi
+                  ;;
+              esac
+            done < "$MAIN_NOTES"
           fi
 
           NL='
           '
 
+          # 2. Parse all project markdown files and sort contents into their category files
           for project_file in "$OUTPUT_DIR"/*.md; do
             [ ! -f "$project_file" ] && continue
             filename=$(basename "$project_file")
@@ -439,39 +456,19 @@ jobs:
                 "## "*) 
                   if [ -n "$current_section" ] && [ -n "$section_content" ]; then
                     section_content=$(printf "%s" "$section_content" | sed '/^$/d')
-                    
                     if [ -n "$section_content" ]; then
-                      # Create the block to insert
-                      printf "### %s %s\n%s\n" "$p_name" "$current_section" "$section_content" > /tmp/sec_insert.tmp
-                      
-                      # Ensure the main section header exists in the file
-                      if ! grep -q "^## $current_section" "$MAIN_NOTES"; then
-                        printf "\n## %s\n" "$current_section" >> "$MAIN_NOTES"
-                      fi
-
-                      # POSIX Compliant: Append to the BOTTOM of the matched section block
-                      # It finds the section header, then finds the NEXT header or EOF, and places it right before it
-                      awk -v sec="## $current_section" '
-                        BEGIN { found=0 }
-                        $0 == sec { found=1; print; next }
-                        found && /^## / { 
-                          while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
-                          close("/tmp/sec_insert.tmp");
-                          found=0;
-                        }
-                        { print }
-                        END { 
-                          if (found) {
-                            while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
-                            close("/tmp/sec_insert.tmp");
-                          }
-                        }
-                      ' "$MAIN_NOTES" > "$MAIN_NOTES.tmp" && mv "$MAIN_NOTES.tmp" "$MAIN_NOTES"
-                      
-                      rm -f /tmp/sec_insert.tmp
+                      printf "### %s %s\n%s\n\n" "$p_name" "$current_section" "$section_content" >> "$CAT_DIR/$current_section.projects"
                     fi
                   fi
-                  current_section=$(echo "$line" | sed 's/^## //')
+                  # Normalize section names to match folder structures cleanly
+                  raw_sec=$(echo "$line" | sed 's/^## //')
+                  case "$raw_sec" in
+                    "BREAKING CHANGES"*) current_section="BREAKING_CHANGES" ;;
+                    "New Features"*)     current_section="New_Features" ;;
+                    "Fixes"*)            current_section="Fixes" ;;
+                    "Notes"*)            current_section="Notes" ;;
+                    *)                   current_section="" ;;
+                  esac
                   section_content=""
                   ;;
                 "#"*)
@@ -484,49 +481,58 @@ jobs:
               esac
             done < "$project_file"
 
-            # Flush final lingering section block safely using the same awk logic
+            # Flush final lingering section block inside file loop
             if [ -n "$current_section" ] && [ -n "$section_content" ]; then
               section_content=$(printf "%s" "$section_content" | sed '/^$/d')
               if [ -n "$section_content" ]; then
-                printf "### %s %s\n%s\n" "$p_name" "$current_section" "$section_content" > /tmp/sec_insert.tmp
-                
-                if ! grep -q "^## $current_section" "$MAIN_NOTES"; then
-                  printf "\n## %s\n" "$current_section" >> "$MAIN_NOTES"
-                fi
-
-                awk -v sec="## $current_section" '
-                  BEGIN { found=0 }
-                  $0 == sec { found=1; print; next }
-                  found && /^## / { 
-                    while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
-                    close("/tmp/sec_insert.tmp");
-                    found=0;
-                  }
-                  { print }
-                  END { 
-                    if (found) {
-                      while ((getline line < "/tmp/sec_insert.tmp") > 0) print line;
-                      close("/tmp/sec_insert.tmp");
-                    }
-                  }
-                ' "$MAIN_NOTES" > "$MAIN_NOTES.tmp" && mv "$MAIN_NOTES.tmp" "$MAIN_NOTES"
-                
-                rm -f /tmp/sec_insert.tmp
+                printf "### %s %s\n%s\n\n" "$p_name" "$current_section" "$section_content" >> "$CAT_DIR/$current_section.projects"
               fi
             fi
           done
 
-          # Clean up any missing or trailing newlines while maintaining sorting structure
-          # Uses awk to safely preserve paragraph blocks instead of crushing lines into a single mess
+          # 3. Rebuild the main release_notes.md file in the STRICT MANDATORY ORDER
+          true > "$MAIN_NOTES"
+
+          # Order Token Sequence: BREAKING_CHANGES -> New_Features -> Fixes -> Notes
+          for cat_type in BREAKING_CHANGES New_Features Fixes Notes; do
+            # Format headers gracefully back to standard titles
+            case "$cat_type" in
+              BREAKING_CHANGES) title="BREAKING CHANGES" ;;
+              New_Features)     title="New Features" ;;
+              Fixes)            title="Fixes" ;;
+              Notes)            title="Notes" ;;
+            )
+
+            # Check if there is any global or project data for this section
+            if [ -f "$CAT_DIR/$cat_type.global" ] || [ -f "$CAT_DIR/$cat_type.projects" ]; then
+              printf "## %s\n" "$title" >> "$MAIN_NOTES"
+              
+              # Append original general notes first if they exist
+              if [ -f "$CAT_DIR/$cat_type.global" ]; then
+                cat "$CAT_DIR/$cat_type.global" >> "$MAIN_NOTES"
+                printf "\n" >> "$MAIN_NOTES"
+              fi
+
+              # Append project-specific breakdown summaries second
+              if [ -f "$CAT_DIR/$cat_type.projects" ]; then
+                cat "$CAT_DIR/$cat_type.projects" >> "$MAIN_NOTES"
+              fi
+            fi
+          done
+
+          # 4. Final sanitization pass to normalize file spacing layout safely
           awk '
-            /^## / { print (NR==1 ? "" : "\n") $0; next }
-            /^### / { print "\n" $0; next }
-            { print }
+            /./ { WAS_EMPTY=0; print; next }
+            !WAS_EMPTY { WAS_EMPTY=1; print "" }
           ' "$MAIN_NOTES" | sed '/./,/^$/!d' > "$MAIN_NOTES.tmp" && mv "$MAIN_NOTES.tmp" "$MAIN_NOTES"
 
           echo "=== [DEBUG] FINAL SORTED MERGED RELEASE NOTES ==="
           cat "$MAIN_NOTES"
           echo "=========================================="
+
+          # Clean up our temporary working directory contents safely
+          rm -rf "$CAT_DIR"
+
 
 
 
