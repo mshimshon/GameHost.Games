@@ -1,10 +1,11 @@
 name: Release
+
 on:
   workflow_run:
-    workflows: ["Build"]
+    workflows: ["Build"] # 👈 Put the EXACT name of your build workflow here
     types:
       - completed
-  workflow_dispatch:
+  workflow_dispatch: # Keeps your manual trigger working
 
 concurrency:
   group: deploy-${{ github.sha }}
@@ -17,37 +18,133 @@ jobs:
     environment:
       name: production
     env:
-      GH_TOKEN: ${{ github.token }}
-
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     permissions:
-      id-token: write  # Crucial for OIDC token request privileges
-      contents: write  
-    if: |
-       github.event.workflow_run.conclusion == 'success' && 
-       startsWith(github.event.workflow_run.head_branch, 'v')
+      id-token: write
+      actions: write
+      contents: write
+
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
 
-      - name: Extract version
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 👈 This forces GitHub to pull ALL history and tags 
+      - name: Calculate Version
         id: get_version
         run: |
-          mkdir -p "/tmp/artifacts/output"
-          # Grabs the short tag name (e.g., v0.0.2)
-          TAG="${{ github.event.workflow_run.head_branch }}"
+          set -eu
+          # 1. Instantly fail if not inside a valid Git repository clone
+          if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "::error::This directory is not a Git repository. Did you forget actions/checkout?"
+            exit 1
+          fi
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1) 
+          echo "$LAST_TAG"
+          if [ -z "$LAST_TAG" ]; then
+            echo "First Release Detected"
+            echo "version=0.0.100" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:%s) 
+          PREV_VERSION=${LAST_TAG#v} 
+          VERSION=$PREV_VERSION
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2) 
+          PATCH=$(echo "$VERSION" | cut -d. -f3) 
+          if echo "$COMMITS" | grep -iq '^trace:'; then
+            echo "release=fasle" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$COMMITS" | grep -iq '^break:'; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+
+          elif echo "$COMMITS" | grep -iq '^feat:'; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+
+          elif echo "$COMMITS" | grep -iq '^fix:'; then
+            PATCH=$((PATCH + 1))
+
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Error this is not a release... there are no fix:,break: or feat:. commits!"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Current Release $VERSION"
+          echo "Next Release $NEW_VERSION"
+
+          echo "previous_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Release Notes
+        if: steps.get_version.outputs.release == 'true'
+        id: generate_release_notes
+        run: |
+          set -eu
+          LAST_VERSION="${{ steps.get_version.outputs.previous_version }}"
+          NEXT_VERSION="${{ steps.get_version.outputs.version }}"
+          COMMITS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%s) 
+
           
-          # Strips the leading 'v' to get just the numbers (e.g., 0.0.2)
-          VERSION="${TAG#v}"
-          
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          mkdir -p /tmp/artifacts/output
+          RELEASE_NOTES_FILE="/tmp/artifacts/output/release_notes.md"
+          echo "" > "$RELEASE_NOTES_FILE"
+
+          # 1. Extract Breaking Changes from FULL commit bodies (%B)
+          BREAKS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$BREAKS" ]; then
+            echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n" "$BREAKS" >> "$RELEASE_NOTES_FILE"
+            echo "" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # 2. Extract Features from FULL commit bodies (%B)
+          FEATS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$FEATS" ]; then
+            echo "## New Features" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n" "$FEATS" >> "$RELEASE_NOTES_FILE"
+            echo "" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # 3. Extract Fixes from FULL commit bodies (%B)
+          FIXES=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$FIXES" ]; then
+            echo "## Fixes" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n" "$FIXES" >> "$RELEASE_NOTES_FILE"
+            echo "" >> "$RELEASE_NOTES_FILE"
+          fi
+
+          # 4. Extract Notes from FULL commit bodies (%B)
+          NOTES=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
+          if [ -n "$NOTES" ]; then
+            echo "## Notes" >> "$RELEASE_NOTES_FILE"
+            printf "%s\n" "$NOTES" >> "$RELEASE_NOTES_FILE"
+            echo "" >> "$RELEASE_NOTES_FILE"
+          fi
+
+
+          echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Setup .NET 10
+        if: steps.get_version.outputs.release == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.x'
 
       - name: Discover Projects
+        if: steps.get_version.outputs.release == 'true'
         id: project_discovery
         run: |
           allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
@@ -75,7 +172,7 @@ jobs:
           echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
 
       - name: Validating Consoles
-        shell: bash
+        if: steps.get_version.outputs.release == 'true'
         run: |
           set -eu
           allProjects="${{ steps.project_discovery.outputs.allProjects }}"
@@ -108,7 +205,7 @@ jobs:
           done
 
       - name: Publish New Releases
-        shell: bash
+        if: steps.get_version.outputs.release == 'true'
         run: |
           set -eu
           releases="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
@@ -136,7 +233,7 @@ jobs:
           done
 
       - name: Compiling Manifests
-        shell: bash
+        if: steps.get_version.outputs.release == 'true'
         run: |
             set -eu
 
@@ -167,7 +264,7 @@ jobs:
             echo "$manifestsArray" > "$GITHUB_WORKSPACE/output/registry/manifests.json"
 
       - name: Building Dependencies Registry
-        shell: bash
+        if: steps.get_version.outputs.release == 'true'
         run: |
           set -eu
           commonFiles="$(find "$GITHUB_WORKSPACE" -name 'dep_*_*_common.json' | sort)"
@@ -181,7 +278,7 @@ jobs:
           done
 
       - name: Validating Release
-        shell: bash
+        if: steps.get_version.outputs.release == 'true'
         run: |
             registry_dir="$GITHUB_WORKSPACE/output/registry"
 
@@ -201,6 +298,7 @@ jobs:
               exit 1
             fi
       - name: Release Consoles
+        if: steps.get_version.outputs.release == 'true'
         run: |
             set -eu
             output_dir="$GITHUB_WORKSPACE/output/consoles"
@@ -219,11 +317,13 @@ jobs:
             done
 
       - name: Release Registry
+        if: steps.get_version.outputs.release == 'true'
         run: |
             set -eu
             registry_dir="$GITHUB_WORKSPACE/output/registry"
+            release_notes="${{ steps.generate_release_notes.outputs.notes_file }}";
             version="${{ steps.get_version.outputs.version }}"
             tag_name="registry-v${version}"
             echo "Creating release $tag_name and uploading registry contents..."
             # Uploads all files inside the registry folder as release assets
-            gh release create "$tag_name" "$registry_dir"/* --title "$tag_name" --notes "Registry release version $version"
+            gh release create "$tag_name" "$registry_dir"/* --title "$tag_name" --notes-file "$release_notes"

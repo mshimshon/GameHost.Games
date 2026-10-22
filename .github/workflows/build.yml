@@ -2,32 +2,92 @@ name: Build
 
 on:
   push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+    branches:
+      - main
+
+  workflow_dispatch:
+
 jobs:
   build:
-    if: github.event.base_ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    
     env:
       DOTNET_TEST_RUNNER: Microsoft.Testing.Platform
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      id-token: write
+      actions: write
+      contents: write
 
     steps:
-      - name: Extract version
-        id: get_version
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${TAG#v}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 👈 This forces GitHub to pull ALL history and tags
+
+      - name: Calculate Version
+        id: get_version
+        run: |
+          set -eu
+          # 1. Instantly fail if not inside a valid Git repository clone
+          if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "::error::This directory is not a Git repository. Did you forget actions/checkout?"
+            exit 1
+          fi
+          LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1) 
+          echo "$LAST_TAG"
+          if [ -z "$LAST_TAG" ]; then
+            echo "First Release Detected"
+            echo "version=0.0.100" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:%s) 
+          PREV_VERSION=${LAST_TAG#v} 
+          VERSION=$PREV_VERSION
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2) 
+          PATCH=$(echo "$VERSION" | cut -d. -f3) 
+          if echo "$COMMITS" | grep -iq '^trace:'; then
+            echo "release=fasle" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if echo "$COMMITS" | grep -iq '^break:'; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+
+          elif echo "$COMMITS" | grep -iq '^feat:'; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+
+          elif echo "$COMMITS" | grep -iq '^fix:'; then
+            PATCH=$((PATCH + 1))
+
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Error this is not a release... there are no fix:,break: or feat:. commits!"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Current Release $VERSION"
+          echo "Next Release $NEW_VERSION"
+
+          echo "previous_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup .NET 10 SDK
+        if: steps.get_version.outputs.release == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
 
       - name: Publish Projects
+        if: steps.get_version.outputs.release == 'true'
         id: project_discovery
         run: |
           allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
@@ -37,6 +97,7 @@ jobs:
           echo "allProjects=${allProjects[*]}" >> $GITHUB_OUTPUT
 
       - name: Validating Consoles
+        if: steps.get_version.outputs.release == 'true'
         run: |
           set -eu
           allProjects="${{ steps.project_discovery.outputs.allProjects }}"
