@@ -47,7 +47,7 @@ jobs:
             exit 0
           fi
           LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1) 
-          echo "$LAST_TAG"
+          echo "LAST RELEASE: $LAST_TAG"
           if [ -z "$LAST_TAG" ]; then
             echo "First Release Detected"
             echo "version=0.0.100" >> "$GITHUB_OUTPUT"
