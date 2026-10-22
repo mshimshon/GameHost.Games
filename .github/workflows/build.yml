@@ -182,10 +182,17 @@ jobs:
           NEXT_VERSION="${{ steps.get_version.outputs.version }}"
           COMMITS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%s) 
 
-          
+          # [DEBUG LOGS] Check raw versions and commit subjects
+          echo "=== [DEBUG] REGISTRY RELEASE NOTES INPUTS ==="
+          echo "LAST_VERSION: $LAST_VERSION"
+          echo "NEXT_VERSION: $NEXT_VERSION"
+          echo "Found commit subjects:"
+          echo "$COMMITS"
+          echo "============================================="
+
           mkdir -p /tmp/artifacts/output
           RELEASE_NOTES_FILE="/tmp/artifacts/output/release_notes.md"
-          echo "" > "$RELEASE_NOTES_FILE"
+          true > "$RELEASE_NOTES_FILE" # Clears file without leaving a blank line at the top
 
           # 1. Extract Breaking Changes from FULL commit bodies (%B)
           BREAKS=$(git log "v$LAST_VERSION"..HEAD --pretty=format:%B | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
@@ -219,8 +226,13 @@ jobs:
             echo "" >> "$RELEASE_NOTES_FILE"
           fi
 
+          # [DEBUG LOGS] Print out the final file contents
+          echo "=== [DEBUG] GENERATED REGISTRY RELEASE NOTES ==="
+          cat "$RELEASE_NOTES_FILE"
+          echo "================================================"
 
           echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
+
 
       - name: Generate Console Release Notes
         if: steps.get_version.outputs.release == 'true'
