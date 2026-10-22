@@ -15,4 +15,4 @@ Full documentation will be provided soon
 ## LICENSE
 Every CLI is MIT licensed and will remain MIT forever do whatever you need with it.
 
-please note the [GameHost](https://github.com/mshimshon/GameHost/) plugin is NOT MIT therefore if used through the plugin it is bound by its license.
+please note the [GameHost](https://github.com/mshimshon/GameHost/) plugin is NOT MIT therefore if used through the plugin it is bound by its license. 
