@@ -36,64 +36,88 @@ jobs:
         id: get_version
         run: |
           set -eu
+          echo "[DEBUG] Starting Calculate Version script..."
+
           # 1. Instantly fail if not inside a valid Git repository clone
           if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             echo "::error::This directory is not a Git repository. Did you forget actions/checkout?"
             exit 1
           fi
+          echo "[DEBUG] Confirmed inside a valid Git repository work tree."
 
           HEAD_COMMIT=$(git log -1 --pretty=format:%s)
-          if echo "$HEAD_COMMIT" | grep -Eiq '\btrace[[:space:]]*:'; then
-            echo "Found Trace in HEAD... Skipping"
+          echo "[DEBUG] HEAD_COMMIT: \"$HEAD_COMMIT\""
+
+          if echo "$HEAD_COMMIT" | grep -qP "(?i)\b(trace)\b\s*:"; then
+            echo "[DEBUG] Found skipped token (trace) in HEAD commit message. Exiting step."
             echo "release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "[DEBUG] HEAD commit cleared (no skip tokens found)."
+
           LAST_TAG=$(git tag --list 'v*' --sort=-version:refname | head -n 1) 
-          echo "LAST RELEASE: $LAST_TAG"
+          echo "[DEBUG] Evaluated LAST RELEASE TAG: \"$LAST_TAG\""
+
           if [ -z "$LAST_TAG" ]; then
-            echo "First Release Detected"
+            echo "[DEBUG] No previous version tag matching 'v*' was found. First Release Scenario Triggered."
             echo "version=0.0.100" >> "$GITHUB_OUTPUT"
             echo "release=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
+          echo "[DEBUG] Fetching commits between $LAST_TAG and HEAD..."
           COMMITS=$(git log "$LAST_TAG"..HEAD --pretty=format:%s) 
           PREV_VERSION=${LAST_TAG#v} 
           VERSION=$PREV_VERSION
+          
           MAJOR=$(echo "$VERSION" | cut -d. -f1)
           MINOR=$(echo "$VERSION" | cut -d. -f2) 
           PATCH=$(echo "$VERSION" | cut -d. -f3) 
-          if echo "$COMMITS" | grep -iq '^trace:'; then
-            echo "release=fasle" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          
+          echo "[DEBUG] Extracted values from previous version ($VERSION):"
+          echo "        MAJOR: $MAJOR"
+          echo "        MINOR: $MINOR"
+          echo "        PATCH: $PATCH"
+          echo "[DEBUG] Commits to parse:"
+          echo "$COMMITS"
 
-          if echo "$COMMITS" | grep -iq '^break:'; then
+          PATCH=$((PATCH + 1))
+          # 2. Check for major breaking changes
+          if echo "$COMMITS" | grep -qP "(?i)\bbreak\b\s*:"; then
+            echo "[DEBUG] Match found for: break token. Incrementing MAJOR version."
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
 
-          elif echo "$COMMITS" | grep -iq '^feat:'; then
+          # 3. Check for new features
+          elif echo "$COMMITS" | grep -qP "(?i)\bfeat\b\s*:"; then
+            echo "[DEBUG] Match found for: feat token. Incrementing MINOR version."
             MINOR=$((MINOR + 1))
             PATCH=0
 
-          elif echo "$COMMITS" | grep -iq '^fix:'; then
+          # 4. Check for bug fixes
+          elif echo "$COMMITS" | grep -qP "(?i)\bfix\b\s*:"; then
+            echo "[DEBUG] Match found for: fix token. Incrementing PATCH version."
             PATCH=$((PATCH + 1))
 
+          # 5. Fallback if no valid token was found anywhere
           else
+            echo "[DEBUG] Error: Code path reached baseline fallback. No fix:, break:, or feat: commits discovered in the collection."
             echo "release=false" >> "$GITHUB_OUTPUT"
-            echo "Error this is not a release... there are no fix:,break: or feat:. commits!"
-            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "Error: This is not a release... there are no fix:, break:, or feat: commits!"
             exit 0
           fi
-
+          
+          echo "[DEBUG] Building Next Version string..."
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-          echo "Current Release $VERSION"
-          echo "Next Release $NEW_VERSION"
+          
+          echo "[DEBUG] Current Release Version: $VERSION"
+          echo "[DEBUG] Calculated Target Version: $NEW_VERSION"
 
           echo "previous_version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "[DEBUG] All output parameters appended safely to GITHUB_OUTPUT. Script complete."
 
       - name: Setup .NET 10
         if: steps.get_version.outputs.release == 'true'
