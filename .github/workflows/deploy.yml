@@ -391,7 +391,7 @@ jobs:
 
             # Check if file contains content beyond just its auto-generated header
             # A file containing only '# Release Notes for Name (Version)' is technically empty of logs.
-            # -s checks if file size is greater than 0, but we should make sure it has real notes.
+            # -s checks if file size is greater than 0, but we should make sure it has real notes. 
             line_count=$(wc -l < "$TARGET_FILE")
             
             if [ "$line_count" -le 2 ]; then
