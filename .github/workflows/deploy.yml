@@ -93,6 +93,68 @@ jobs:
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "release=true" >> "$GITHUB_OUTPUT"
 
+      - name: Setup .NET 10
+        if: steps.get_version.outputs.release == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Discover Projects
+        if: steps.get_version.outputs.release == 'true'
+        id: project_discovery
+        run: |
+          allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
+          projectVersions=""
+          projectVersionToRelease=""
+          projectCommits=""
+
+          # Use the single global version from the previous step
+          version="${{ steps.get_version.outputs.version }}"
+
+          for csproj in $allProjects; do
+            name="$(basename "$csproj" .csproj)"
+            project_dir="$(dirname "$csproj")"
+            
+            echo "Processing project: $name ($version)"
+            projectVersions+="${csproj};${version};${name} "
+
+            # 1. Find the latest existing tag matching this project's pattern
+            latest_tag=$(git tag -l "registry-*" | sort -V | tail -n 1)
+
+            if [ -n "$latest_tag" ]; then
+              echo "  Found last tag: $latest_tag"
+              
+              # 2. Extract commit IDs affecting this folder since the tag
+              affected_commits=$(git log --pretty=format:%H "$latest_tag"..HEAD -- "$project_dir" | tr '\n' ',' | sed 's/,$//')
+
+              if [ -n "$affected_commits" ]; then
+                echo "  -> Changes detected. Commits: $affected_commits"
+                projectVersionToRelease+="${csproj};${version};${name} "
+                projectCommits+="${name}:${affected_commits} "
+              else
+                echo "  -> No changes detected in $project_dir. Skipping release."
+              fi
+            else
+              # 3. Fallback: If no tag exists at all, grab all historical commits for this folder
+              echo "  -> No previous tag found for ${name}. Aggregating history."
+              affected_commits=$(git log --pretty=format:%H HEAD -- "$project_dir" | tr '\n' ',' | sed 's/,$//')
+              
+              if [ -z "$affected_commits" ]; then
+                affected_commits=$(git rev-parse HEAD)
+              fi
+              
+              projectVersionToRelease+="${csproj};${version};${name} "
+              projectCommits+="${name}:${affected_commits} "
+            fi
+          done
+
+          # Strip trailing spaces and save everything to outputs
+          echo "projectVersionToRelease=${projectVersionToRelease% }" >> $GITHUB_OUTPUT
+          echo "projectVersions=${projectVersions% }" >> $GITHUB_OUTPUT
+          echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
+          echo "projectCommits=${projectCommits% }" >> $GITHUB_OUTPUT
+
+
       - name: Generate Release Notes
         if: steps.get_version.outputs.release == 'true'
         id: generate_release_notes
@@ -142,39 +204,133 @@ jobs:
 
           echo "notes_file=$RELEASE_NOTES_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Setup .NET 10
+      - name: Generate Release Notes
         if: steps.get_version.outputs.release == 'true'
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.x'
-
-      - name: Discover Projects
-        if: steps.get_version.outputs.release == 'true'
-        id: project_discovery
+        id: generate_release_notes
         run: |
-          allProjects="$(find "$GITHUB_WORKSPACE/src/Setup" -mindepth 2 -maxdepth 2 -name '*.csproj' | sort)"
-          projectVersions=""
-          projectVersionToRelease=""
-          for csproj in $allProjects; do
-            name="$(basename "$csproj" .csproj)"
-            version="$(grep -oPm1 '(?<=<Version>)[^<]+' "$csproj" || true)"
-            if [ -z "$version" ]; then
-              echo "::error file=$csproj::Missing <Version>"
-              exit 1
+          set -eu
+          OUTPUT_DIR="/tmp/artifacts/output"
+          mkdir -p "$OUTPUT_DIR"
+
+          # 1. Grab our space-separated lists from the discovery output variables
+          PROJECTS_TO_RELEASE="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
+          PROJECT_COMMITS_MAP="${{ steps.project_discovery.outputs.projectCommits }}"
+
+          # 2. Iterate through each project that requires a release
+          for project in $PROJECTS_TO_RELEASE; do
+            # Extract name and version from format: csproj;version;name
+            p_name=$(echo "$project" | cut -d';' -f3)
+            p_version=$(echo "$project" | cut -d';' -f2)
+
+            # Define unique output file path for this project
+            RELEASE_NOTES_FILE="$OUTPUT_DIR/${p_name}.md"
+            echo "# Release Notes for $p_name ($p_version)" > "$RELEASE_NOTES_FILE"
+
+            # 3. Find this project's matching entry in the projectCommits list
+            p_match=""
+            for entry in $PROJECT_COMMITS_MAP; do
+              case "$entry" in
+                "$p_name":*) p_match="$entry" ; break ;;
+              esac
+            done
+
+            # Skip to next project if no explicit commits are associated with it
+            [ -z "$p_match" ] && continue
+            
+            # Isolate just the comma-separated SHAs and convert them to spaces for looping
+            raw_shas=$(echo "$p_match" | cut -d':' -f2)
+            commit_pool=$(echo "$raw_shas" | tr ',' ' ')
+
+            # Initialize accumulated holders for current project's tokens
+            breaks=""
+            feats=""
+            fixes=""
+            notes=""
+            commits=""
+
+            # 4. Iterate over only the specific commits that touched this project
+            for sha in $commit_pool; do
+              [ -z "$sha" ] && continue
+              
+              # Grab full commit body text and the single line subject
+              commit_body=$(git log -1 --pretty=format:%B "$sha")
+              commit_subject=$(git log -1 --pretty=format:%s "$sha")
+
+              # Extract conventional tokens line-by-line using POSIX sh structures
+              c_break=$(echo "$commit_body" | grep -Ei '^break:' | sed 's/^[Bb][Rr][Ee][Aa][Kk]:[[:space:]]*//' | sed 's/^/- /' || true)
+              c_feat=$(echo "$commit_body" | grep -Ei '^feat:' | sed 's/^[Ff][Ee][Aa][Tt]:[[:space:]]*//' | sed 's/^/- /' || true)
+              c_fix=$(echo "$commit_body" | grep -Ei '^fix:' | sed 's/^[Ff][Ii][Xx]:[[:space:]]*//' | sed 's/^/- /' || true)
+              c_note=$(echo "$commit_body" | grep -Ei '^note:' | sed 's/^[Nn][Oo][Tt][Ee]:[[:space:]]*//' | sed 's/^/- /' || true)
+
+              # Track if this commit matched any specified structural keywords
+              matched=0
+
+              if [ -n "$c_break" ]; then
+                breaks="${breaks}${c_break}
+                "
+                matched=1
+              fi
+              if [ -n "$c_feat" ]; then
+                feats="${feats}${c_feat}
+                "
+                matched=1
+              fi
+              if [ -n "$c_fix" ]; then
+                fixes="${fixes}${c_fix}
+                "
+                matched=1
+              fi
+              if [ -n "$c_note" ]; then
+                notes="${notes}${c_note}
+                "
+                matched=1
+              fi
+
+              # If it did NOT match any conventional tokens, save it under the fallback group
+              if [ "$matched" -eq 0 ] && [ -n "$commit_subject" ]; then
+                commits="${commits}- ${commit_subject}
+                "
+              fi
+            done
+
+            # 5. Append organized headers and list segments to the project file
+            if [ -n "$breaks" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## BREAKING CHANGES" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$breaks" >> "$RELEASE_NOTES_FILE"
             fi
-            if ! echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                echo "::error file=$csproj::Invalid version '$version'. Expected x.x.x"
-                exit 1
+
+            if [ -n "$feats" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## New Features" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$feats" >> "$RELEASE_NOTES_FILE"
             fi
-            echo "$csproj -> $version"
-            projectVersions+="${csproj};${version};${name} "
-            if ! gh release view "${name}-v${version}" >/dev/null 2>&1; then
-              projectVersionToRelease+="${csproj};${version};${name} "
+
+            if [ -n "$fixes" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## Fixes" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$fixes" >> "$RELEASE_NOTES_FILE"
             fi
+
+            if [ -n "$notes" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## Notes" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$notes" >> "$RELEASE_NOTES_FILE"
+            fi
+
+            if [ -n "$commits" ]; then
+              echo "" >> "$RELEASE_NOTES_FILE"
+              echo "## Commits" >> "$RELEASE_NOTES_FILE"
+              printf "%s" "$commits" >> "$RELEASE_NOTES_FILE"
+            fi
+            
+            echo "Successfully generated: $RELEASE_NOTES_FILE"
           done
-          echo "projectVersionToRelease=${projectVersionToRelease}" >> $GITHUB_OUTPUT
-          echo "projectVersions=${projectVersions}" >> $GITHUB_OUTPUT
-          echo "allProjects=${allProjects}" >> $GITHUB_OUTPUT
+
+          # Return the entire base directory path instead of a single document
+          echo "output_directory=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
+
+
 
       - name: Validating Consoles
         if: steps.get_version.outputs.release == 'true'
@@ -214,6 +370,7 @@ jobs:
         run: |
           set -eu
           releases="${{ steps.project_discovery.outputs.projectVersionToRelease }}"
+          VERSION="${{ steps.get_version.outputs.version }}"
 
           if [ -z "$releases" ]; then
             echo "NO RELEASE FOUND"
@@ -225,15 +382,23 @@ jobs:
             set -- $(echo "$item" | tr ';' ' ')
 
             csproj="$1"
-            version="$2"
             name="$3"
 
             echo "Publishing $name version $version..."
 
             publish_dir="$GITHUB_WORKSPACE/publish_temp/$name"
-            dotnet publish "$csproj" -c Release -r linux-x64 --self-contained true -o "$publish_dir"
 
-            archive_name="${name}.${version}.tar.gz"
+            dotnet publish "$csproj" \ 
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -o "$publish_dir" \
+            /p:AssemblyVersion=$VERSION \
+            /p:FileVersion=$VERSION \
+            /p:InformationalVersion=$VERSION
+
+            archive_name="${name}.${VERSION}.tar.gz"
             tar -czf "$GITHUB_WORKSPACE/output/consoles/$archive_name" -C "$publish_dir" .
           done
 
@@ -302,10 +467,12 @@ jobs:
               echo "::error::No tar.gz files found in $output_dir"
               exit 1
             fi
+
       - name: Release Consoles
         if: steps.get_version.outputs.release == 'true'
         run: |
             set -eu
+            version="${{ steps.get_version.outputs.version }}"
             output_dir="$GITHUB_WORKSPACE/output/consoles"
             tarball_files="$(find "$output_dir" -name '*.tar.gz' | sort)"
             for tarball in $tarball_files; do
@@ -313,7 +480,6 @@ jobs:
 
               base_no_ext="${filename%.tar.gz}"
 
-              version="$(echo "$base_no_ext" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$')"
               name="${base_no_ext%.$version}"
 
               tag_name="${name}-v${version}"
