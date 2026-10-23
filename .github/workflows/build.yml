@@ -363,7 +363,7 @@ jobs:
               fi
 
               if [ "$matched" -eq 0 ] && [ -n "$commit_subject" ]; then
-                commits="${commits}$(printf "- %s\n" "$commit_subject")"
+                commits="${commits}$(printf '%s\n' "- $commit_subject")"
               fi
             done
 

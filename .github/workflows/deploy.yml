@@ -368,7 +368,7 @@ jobs:
               fi
 
               if [ "$matched" -eq 0 ] && [ -n "$commit_subject" ]; then
-                commits="${commits}$(printf "- %s\n" "$commit_subject")"
+                commits="${commits}$(printf '%s\n' "- $commit_subject")"
               fi
             done
 
@@ -410,7 +410,6 @@ jobs:
           done
 
           echo "output_directory=$OUTPUT_DIR" >> "$GITHUB_OUTPUT"
-
       - name: Merge Project Release Notes
         if: steps.get_version.outputs.release == 'true'
         id: merge_release_notes
