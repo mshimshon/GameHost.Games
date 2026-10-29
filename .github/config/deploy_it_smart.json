@@ -8,7 +8,8 @@
   "SponsorHeader": "Release Sponsors",
   "ThanksHeader": "Special Thanks",
   "Projects": {
-    "_": "My Project Name"
+    "_": "My Project Name",
+    "src/Setup/ProjectZomboid/ProjectZomboid.csproj": "Project Zomboid"
   },
   "TagMarkdown": {
     "@": "[{this}](https://github.com/{this})"
