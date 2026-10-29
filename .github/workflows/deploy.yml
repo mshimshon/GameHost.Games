@@ -90,7 +90,7 @@ jobs:
             echo "::error::The changelog file _.md exists but it is completely empty!"
             exit 1
           fi
-
+          ls "$OUTPUT"
       - name: Publish New Releases
         shell: bash
         run: |
