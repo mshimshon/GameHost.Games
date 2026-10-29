@@ -115,7 +115,7 @@ jobs:
             # Extract name without extension (e.g., GameServer)
             name="${filename%.csproj}"
 
-            changelog_file="/tmp/artifacts/changelogs/${name}.md"
+            changelog_file="/tmp/output/changelogs/${name}.md"
 
             # Check if matching changelog exists
             if [ ! -f "$changelog_file" ]; then
